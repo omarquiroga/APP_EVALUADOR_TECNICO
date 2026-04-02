@@ -77,4 +77,5 @@ C:\Python314\python.exe -m venv .\.venv
 
 Endpoint previsto para el futuro cliente MCP:
 
-- `http://127.0.0.1:8765/mcp`
+- local para pruebas del operador: `http://127.0.0.1:8765/mcp`
+- para ChatGPT: URL publica HTTPS terminada en `/mcp`, por ejemplo `https://<subdominio-publico>/mcp`

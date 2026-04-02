@@ -11,7 +11,7 @@
 
 ## Tareas abiertas
 
-- Conectar la futura app MCP de ChatGPT al endpoint local `/mcp`.
+- Exponer el servidor MCP local mediante una URL publica HTTPS terminada en `/mcp` para poder registrarlo en ChatGPT.
 - Validar en un equipo operador el comando exacto de continuacion de Codex si el CLI cambia de version.
 - Definir si la automatizacion debe restringirse a un solo workspace o a una allowlist corta.
 - Evaluar si conviene emitir artefactos mas estructurados por tarea, por ejemplo resumen final, logs separados o metadatos de commit.
@@ -26,10 +26,34 @@
 
 ## Siguiente paso recomendado
 
-Conectar ChatGPT web o la futura app MCP al endpoint local `http://127.0.0.1:8765/mcp` y probar un flujo corto con:
+Levantar el servidor MCP local en el puerto configurado, publicarlo con un tunel HTTPS y registrar en ChatGPT la URL publica terminada en `/mcp`.
+
+Secuencia operativa minima:
 
 1. `start_eval_task`
 2. `get_eval_task_status`
 3. `continue_eval_task`
 
 Si ese flujo queda estable en el equipo operador, la siguiente mejora deberia ser endurecer la persistencia y el seguimiento de sesiones en `automation/` antes de ampliar alcance funcional.
+
+## Conexion ChatGPT
+
+Arranque local del servidor:
+
+```powershell
+Set-Location "C:\PROYECTOS\Evaluador Tecnico LFVU\automation"
+& '.\run.ps1'
+```
+
+Tunel HTTPS con ngrok:
+
+```powershell
+ngrok http 8765
+```
+
+Registro del conector en ChatGPT:
+
+- copiar la URL HTTPS publica que entregue ngrok
+- agregar `/mcp` al final
+- registrar en ChatGPT la URL final con forma `https://<subdominio-publico>/mcp`
+- no registrar `http://127.0.0.1:8765/mcp` porque `localhost` no es accesible desde ChatGPT
