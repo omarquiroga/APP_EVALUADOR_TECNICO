@@ -97,3 +97,31 @@ Si se usa un tunel publico distinto, el host HTTPS de ese tunel debe estar permi
 Unico paso manual final en ChatGPT web:
 
 1. Crear o editar la conexion MCP y registrar la URL publica final con forma `https://<subdominio-publico>/mcp`.
+
+## Estado operativo actual
+
+Metodo de tunel recomendado en este equipo:
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:8765
+```
+
+Verificacion publica minima:
+
+```powershell
+curl.exe -i https://<subdominio>.trycloudflare.com/health
+curl.exe -I https://<subdominio>.trycloudflare.com/mcp
+curl.exe -I https://<subdominio>.trycloudflare.com/mcp/
+```
+
+URL publica vigente en esta validacion:
+
+```text
+https://plays-mortgages-pack-dressed.trycloudflare.com/mcp/
+```
+
+Esa URL es temporal. Si `cloudflared` se reinicia, el subdominio `trycloudflare.com` cambia y hay que volver a registrar la nueva URL publica en ChatGPT.
+
+Unico paso manual final en ChatGPT web para esta corrida:
+
+1. Crear o editar el conector MCP y pegar `https://plays-mortgages-pack-dressed.trycloudflare.com/mcp/`.
