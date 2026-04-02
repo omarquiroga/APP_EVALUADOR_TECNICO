@@ -15,6 +15,7 @@
 - La automatizacion se implementa fuera del runtime Django, en `automation/`.
 - El servidor expone un MCP HTTP minimo en la ruta `/mcp`.
 - El `healthcheck` HTTP expone tambien el resultado de un precheck del comando configurado para Codex, para distinguir entre servidor sano y runner realmente ejecutable.
+- Si `CODEX_COMMAND` queda en el valor por defecto `codex`, el servidor intenta resolver automaticamente un binario usable en `~/.codex/.sandbox-bin/` antes de darlo por fallido.
 - La automatizacion usa Codex CLI como motor de ejecucion en lugar de integrar logica de negocio dentro del servidor MCP.
 - El estado de sesiones se persiste en archivos JSON locales para mantener la base simple y sin base adicional.
 - La continuacion de sesiones usa el identificador local de la sesion y, cuando se detecta, el `codex_session_id` observado en `~/.codex/sessions`.

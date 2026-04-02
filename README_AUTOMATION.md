@@ -49,6 +49,7 @@ https://abc123.ngrok-free.app/mcp
 ## Nota operativa
 
 - Si `ngrok` no esta instalado en el equipo, hay que instalarlo primero o usar otro tunel HTTPS equivalente.
+- ngrok v3 ya no sirve sin cuenta verificada y `authtoken`; si falta ese dato, el comando falla con `ERR_NGROK_4018`.
 - ChatGPT no debe apuntar a `localhost`.
 - La URL registrada debe terminar exactamente en `/mcp`.
 
@@ -63,12 +64,24 @@ Set-Location "C:\PROYECTOS\Evaluador Tecnico LFVU\automation"
 
 El servidor queda escuchando localmente en `http://127.0.0.1:8765`, con `healthcheck` en `http://127.0.0.1:8765/health` y el endpoint MCP montado en `http://127.0.0.1:8765/mcp` que redirige a `http://127.0.0.1:8765/mcp/`.
 
-En `http://127.0.0.1:8765/health` debe verse `codex_command_ok: true` para confirmar que el runner tambien puede ejecutar Codex. Si aparece `false`, hay que ajustar `CODEX_COMMAND` en `automation/.env` a un comando realmente invocable en ese equipo.
+En `http://127.0.0.1:8765/health` debe verse `codex_command_ok: true` para confirmar que el runner tambien puede ejecutar Codex. Si `CODEX_COMMAND=codex` falla en Windows, el servidor intenta resolver automaticamente un binario usable en `~/.codex/.sandbox-bin/codex.exe` antes de exigir ajuste manual.
 
 Abrir el tunel HTTPS:
 
 ```powershell
 ngrok http 8765
+```
+
+Si ngrok no tiene `authtoken`, una alternativa inmediata sin credenciales extra es `cloudflared` quick tunnel:
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:8765
+```
+
+`cloudflared` imprimira una URL publica HTTPS tipo `https://<subdominio>.trycloudflare.com`. La URL exacta a registrar en ChatGPT sera:
+
+```text
+https://<subdominio>.trycloudflare.com/mcp
 ```
 
 URL exacta a registrar en ChatGPT:

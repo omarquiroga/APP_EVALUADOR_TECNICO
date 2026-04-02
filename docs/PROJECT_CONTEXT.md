@@ -18,6 +18,7 @@ Adicion tecnica nueva en esta V1:
 - carpeta `automation/` fuera del runtime Django
 - servidor MCP Python minimo montado en `/mcp`
 - `healthcheck` HTTP con diagnostico del comando de Codex
+- autodeteccion del binario de Codex en `~/.codex/.sandbox-bin` cuando el alias por defecto de Windows no es invocable
 - ejecucion de tareas mediante Codex CLI sobre el mismo workspace del repo
 - estado local persistido en JSON para sesiones de automatizacion
 
@@ -88,4 +89,4 @@ Validacion operativa reciente:
 
 - `run.ps1` levanta el servidor en `127.0.0.1:8765`
 - `/health` responde OK y reporta si el comando local de Codex es ejecutable
-- en este host concreto, el comando `codex` responde `Acceso denegado.` al precheck y por eso las tareas fallan antes de ejecutarse
+- en este host concreto, el alias `codex` de `WindowsApps` responde `Acceso denegado.`, pero el binario funcional existe en `~/.codex/.sandbox-bin/codex.exe`

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,6 +44,43 @@ def _env_value(name: str, default: str) -> str:
 
     normalized = value.strip()
     return normalized or default
+
+
+def _is_command_usable(command: str) -> bool:
+    try:
+        completed = subprocess.run(
+            [command, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            shell=False,
+        )
+    except Exception:
+        return False
+
+    return completed.returncode == 0
+
+
+def _resolve_codex_command(configured_command: str) -> str:
+    # Respect explicit non-default overrides so the operator can force a custom wrapper.
+    if configured_command and configured_command != "codex":
+        return configured_command
+
+    candidates = [
+        configured_command,
+        str(Path.home() / ".codex" / ".sandbox-bin" / "codex.exe"),
+        str(Path.home() / ".codex" / ".sandbox-bin" / "codex"),
+    ]
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        if _is_command_usable(candidate):
+            return candidate
+
+    return configured_command
 
 
 @dataclass(frozen=True)
@@ -99,7 +137,7 @@ def get_settings() -> AppSettings:
         allowed_workspaces=allowed_workspaces,
         state_dir=state_dir,
         log_dir=log_dir,
-        codex_command=os.getenv("CODEX_COMMAND", "codex"),
+        codex_command=_resolve_codex_command(_env_value("CODEX_COMMAND", "codex")),
         codex_start_template=os.getenv(
             "CODEX_START_TEMPLATE",
             "{codex_command} exec {prompt}",

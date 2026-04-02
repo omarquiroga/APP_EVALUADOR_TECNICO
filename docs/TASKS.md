@@ -22,6 +22,7 @@
 - La V1 depende de que Codex CLI este instalado y autenticado localmente fuera del repo.
 - En este entorno de desarrollo la invocacion directa de `codex.exe` desde PowerShell puede estar restringida; por eso el comando queda configurable por `.env`.
 - El `healthcheck` ya expone esa limitacion como `codex_command_ok=false` cuando el host no puede invocar `CODEX_COMMAND`.
+- Si el alias `codex` de Windows falla pero existe `~/.codex/.sandbox-bin/codex.exe`, la V1 ya puede autodetectarlo sin cambio manual de `.env`.
 - El estado de tareas corre en JSON local y memoria del proceso, asi que un reinicio del servidor durante una ejecucion puede dejar sesiones en estado intermedio hasta reconciliacion manual.
 - Si se abre otro flujo de escritura sin repetir el patron de permisos, puede reintroducir dependencia de `login_required` como unico control.
 
