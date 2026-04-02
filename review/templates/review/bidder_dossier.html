@@ -1,0 +1,93 @@
+{% extends 'review/base.html' %}
+
+{% block title %}{{ bidder.name }} | Expediente{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-12 col-xxl-3">
+        <div class="review-card bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="review-section-title">Expediente</div>
+                <h1 class="h4 mb-1">{{ bidder.name }}</h1>
+                <p class="text-secondary mb-3">{{ bidder.identification_type }} {{ bidder.identification_number }}</p>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <span class="badge text-bg-secondary">{{ bidder.get_state_display }}</span>
+                    <span class="badge text-bg-light border">{{ process.code }}</span>
+                </div>
+                <dl class="mb-0 small">
+                    <dt class="text-secondary">Proceso</dt>
+                    <dd class="mb-2">{{ process.name }}</dd>
+                    <dt class="text-secondary">Documentos</dt>
+                    <dd class="mb-2">{{ bidder.document_count }}</dd>
+                    <dt class="text-secondary">Validaciones</dt>
+                    <dd class="mb-2">{{ bidder.validation_count }}</dd>
+                    <dt class="text-secondary">Causales</dt>
+                    <dd class="mb-0">{{ bidder.causal_count }}</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="review-card bg-white mb-4">
+            <div class="review-card-header px-4 py-3">
+                <div class="review-section-title">Bloques de revision</div>
+                <div class="fw-semibold">Navegacion del expediente</div>
+            </div>
+            <div class="card-body">
+                {% include 'review/partials/_bidder_section_nav.html' %}
+            </div>
+        </div>
+
+        <div class="review-card bg-white">
+            <div class="review-card-header px-4 py-3">
+                <div class="review-section-title">Actividad reciente</div>
+                <div class="fw-semibold">Auditoria del proponente</div>
+            </div>
+            <div class="card-body">
+                {% for event in recent_audit_events %}
+                    <div class="border-bottom pb-3 mb-3">
+                        <div class="d-flex justify-content-between gap-2">
+                            <div class="fw-semibold">{{ event.module }}</div>
+                            <div class="text-secondary small">{{ event.created_at|date:"Y-m-d H:i" }}</div>
+                        </div>
+                        <div>{{ event.action }}</div>
+                        <div class="text-secondary small">{{ event.object_type }} / {{ event.object_uuid|slice:":8" }}</div>
+                    </div>
+                {% empty %}
+                    <div class="text-secondary">No hay eventos recientes para este proponente.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xxl-9">
+        <div class="review-card bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                    <div>
+                        <div class="review-section-title">Revision operativa</div>
+                        <h2 class="h4 mb-1">Expediente del proponente</h2>
+                        <p class="mb-0 text-secondary">Vista consolidada de lectura para documentos, RUP, experiencia, validaciones, causales y consolidacion.</p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'review:finance_overview' process.id bidder.id %}" class="btn btn-outline-success btn-sm">Contexto financiero</a>
+                        <a href="{% url 'review:process_bidder_list' process.id %}" class="btn btn-outline-secondary btn-sm">Volver a proponentes</a>
+                        <a href="/admin/bidders/bidder/{{ bidder.id }}/change/" class="btn btn-outline-primary btn-sm">Abrir en admin</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="bidder-section-content">
+            <div id="section-loading" class="htmx-indicator mb-3">
+                <div class="review-card bg-white">
+                    <div class="card-body py-3 px-4 d-flex align-items-center gap-3">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+                        <div class="text-secondary">Cargando bloque del expediente...</div>
+                    </div>
+                </div>
+            </div>
+            {{ section_html|safe }}
+        </div>
+    </div>
+</div>
+{% endblock %}

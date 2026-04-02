@@ -1,0 +1,97 @@
+{% extends 'review/base.html' %}
+
+{% block title %}{{ bidder.name }} | Nueva evaluacion financiera{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-12 col-xxl-3">
+        <div class="review-card bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="review-section-title">Evaluacion financiera</div>
+                <h1 class="h5 mb-1">{{ bidder.name }}</h1>
+                <p class="text-secondary mb-3">Insumo v{{ financial_input.version_no }} · {{ financial_input.source_label }}</p>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <span class="badge text-bg-secondary">{{ financial_input.get_status_display }}</span>
+                    <span class="badge text-bg-light border">{{ process.code }}</span>
+                </div>
+                <dl class="mb-0 small">
+                    <dt class="text-secondary">Fecha fuente</dt>
+                    <dd class="mb-2">{{ financial_input.source_date|date:"Y-m-d" }}</dd>
+                    <dt class="text-secondary">Activos</dt>
+                    <dd class="mb-2">{{ financial_input.assets_value }}</dd>
+                    <dt class="text-secondary">Pasivos</dt>
+                    <dd class="mb-2">{{ financial_input.liabilities_value }}</dd>
+                    <dt class="text-secondary">Ingreso operacional</dt>
+                    <dd class="mb-0">{{ financial_input.operating_income_value }}</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="review-card bg-white">
+            <div class="card-body p-4">
+                <div class="review-section-title">Evaluacion vigente actual</div>
+                {% if current_assessment %}
+                    <div class="fw-semibold mb-1">v{{ current_assessment.version_no }} · {{ current_assessment.get_result_code_display }}</div>
+                    <div class="text-secondary small mb-3">
+                        Insumo v{{ current_assessment.financial_input_version.version_no }}
+                        {% if current_assessment.used_in_consolidation %}· Vigente{% endif %}
+                    </div>
+                {% else %}
+                    <div class="text-secondary small mb-3">No existe una evaluacion financiera vigente para este proponente.</div>
+                {% endif %}
+                <div class="d-grid gap-2">
+                    <a href="{% url 'review:financial_input_detail' process.id bidder.id financial_input.id %}" class="btn btn-outline-secondary btn-sm">Volver al insumo</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xxl-9">
+        <div class="review-card bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="review-section-title">Confirmacion controlada</div>
+                <h2 class="h4 mb-1">Crear y confirmar evaluacion financiera</h2>
+                <p class="mb-0 text-secondary">La evaluacion se crea directamente como <strong>Confirmada</strong> y queda vigente de forma implicita. Si ya existe una evaluacion vigente anterior, sera reemplazada de forma atomica.</p>
+            </div>
+        </div>
+
+        <div class="review-card bg-white">
+            <div class="card-body p-4">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {% for error in form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="{{ form.result_code.id_for_label }}">Resultado</label>
+                            {{ form.result_code }}
+                            {% for error in form.result_code.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-6">
+                            <div class="rounded border bg-light px-3 py-2 small text-secondary h-100 d-flex align-items-center">
+                                Esta evaluacion quedara vigente para consolidacion al confirmarse.
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="{{ form.assessment_note.id_for_label }}">Observacion de la evaluacion</label>
+                            {{ form.assessment_note }}
+                            {% for error in form.assessment_note.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-success">Confirmar evaluacion financiera</button>
+                        <a href="{% url 'review:financial_input_detail' process.id bidder.id financial_input.id %}" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

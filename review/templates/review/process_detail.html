@@ -1,0 +1,156 @@
+{% extends 'review/base.html' %}
+
+{% block title %}{{ process.code }} | Consola de Expedientes{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-12 col-xl-8">
+        <div class="review-card bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="review-section-title">Proceso</div>
+                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                    <div>
+                        <h1 class="h3 mb-1">{{ process.code }} - {{ process.name }}</h1>
+                        <p class="mb-2 text-secondary">{{ process.entity_name }}</p>
+                        <div class="d-flex flex-wrap gap-2">
+                            <span class="badge text-bg-secondary">{{ process.get_state_display }}</span>
+                            <span class="badge text-bg-light border">{{ process.modality|default:"Sin modalidad" }}</span>
+                            <span class="badge text-bg-light border">{{ process.process_type|default:"Sin tipo" }}</span>
+                        </div>
+                    </div>
+                    <a href="{% url 'review:process_bidder_list' process.id %}" class="btn btn-primary">Ver proponentes</a>
+                </div>
+                {% if process.description %}
+                    <hr>
+                    <p class="mb-0">{{ process.description }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-12 col-md-4">
+                <div class="review-stat">
+                    <div class="review-section-title">Proponentes</div>
+                    <div class="display-6 fw-semibold">{{ process.bidder_count }}</div>
+                    <div class="text-secondary small">Registrados en el proceso</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="review-stat">
+                    <div class="review-section-title">Apertura</div>
+                    <div class="fw-semibold">{{ process.opening_date|default:"-" }}</div>
+                    <div class="text-secondary small">Fecha de apertura</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="review-stat">
+                    <div class="review-section-title">Cierre</div>
+                    <div class="fw-semibold">{{ process.closing_date|default:"-" }}</div>
+                    <div class="text-secondary small">Fecha de cierre</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="review-card bg-white">
+            <div class="review-card-header px-4 py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="review-section-title">Proponentes</div>
+                        <div class="fw-semibold">Acceso rapido a expedientes</div>
+                    </div>
+                    <a href="{% url 'review:process_bidder_list' process.id %}" class="btn btn-outline-primary btn-sm">Ver todos</a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle review-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Proponente</th>
+                                <th>Estado</th>
+                                <th>Documentos</th>
+                                <th>Validaciones</th>
+                                <th>Causales</th>
+                                <th class="text-end">Expediente</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for bidder in bidders %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">{{ bidder.name }}</div>
+                                        <div class="text-secondary small">{{ bidder.identification_type }} {{ bidder.identification_number }}</div>
+                                    </td>
+                                    <td><span class="badge text-bg-light border">{{ bidder.get_state_display }}</span></td>
+                                    <td>{{ bidder.document_count }}</td>
+                                    <td>{{ bidder.validation_count }}</td>
+                                    <td>{{ bidder.causal_count }}</td>
+                                    <td class="text-end">
+                                        <a href="{% url 'review:bidder_dossier' process.id bidder.id %}" class="btn btn-sm btn-outline-primary">Abrir</a>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="6" class="p-4">
+                                        <div class="review-empty p-4 text-center text-secondary">Todavia no hay proponentes asociados a este proceso.</div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-4">
+        <div class="review-card bg-white mb-4">
+            <div class="review-card-header px-4 py-3">
+                <div class="review-section-title">Base normativa</div>
+                <div class="fw-semibold">Configuracion vigente del proceso</div>
+            </div>
+            <div class="card-body">
+                {% if process.normative_binding_safe %}
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Familia</dt>
+                        <dd class="col-sm-7">{{ process.normative_binding_safe.document_type_version.family.name }}</dd>
+                        <dt class="col-sm-5">Version</dt>
+                        <dd class="col-sm-7">{{ process.normative_binding_safe.document_type_version.version_label }}</dd>
+                        <dt class="col-sm-5">Snapshot</dt>
+                        <dd class="col-sm-7">
+                            {% if process.normative_binding_safe.current_snapshot %}
+                                {{ process.normative_binding_safe.current_snapshot.snapshot_label }}
+                            {% else %}
+                                <span class="text-secondary">Sin snapshot actual</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                {% else %}
+                    <div class="text-secondary">El proceso no tiene vinculo normativo configurado.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="review-card bg-white">
+            <div class="review-card-header px-4 py-3">
+                <div class="review-section-title">Actividad reciente</div>
+                <div class="fw-semibold">Auditoria del proceso</div>
+            </div>
+            <div class="card-body">
+                {% for event in recent_audit_events %}
+                    <div class="border-bottom pb-3 mb-3">
+                        <div class="d-flex justify-content-between gap-2">
+                            <div class="fw-semibold">{{ event.module }}</div>
+                            <div class="text-secondary small">{{ event.created_at|date:"Y-m-d H:i" }}</div>
+                        </div>
+                        <div>{{ event.action }}</div>
+                        <div class="text-secondary small">{{ event.object_type }} / {{ event.object_uuid|slice:":8" }}</div>
+                    </div>
+                {% empty %}
+                    <div class="text-secondary">No hay eventos recientes para este proceso.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

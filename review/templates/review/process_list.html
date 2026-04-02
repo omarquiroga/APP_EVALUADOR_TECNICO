@@ -1,0 +1,67 @@
+{% extends 'review/base.html' %}
+
+{% block title %}Procesos | Consola de Expedientes{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-end mb-4">
+    <div>
+        <div class="review-section-title">Vista general</div>
+        <h1 class="h3 mb-1">Procesos de contratacion</h1>
+        <p class="text-secondary mb-0">Acceso inicial a los expedientes y a los proponentes asociados.</p>
+    </div>
+</div>
+
+<div class="review-card bg-white">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle review-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Proceso</th>
+                        <th>Entidad</th>
+                        <th>Estado</th>
+                        <th>Modalidad</th>
+                        <th>Proponentes</th>
+                        <th>Base normativa</th>
+                        <th class="text-end">Abrir</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for process in processes %}
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">{{ process.code }}</div>
+                                <div class="text-secondary small">{{ process.name }}</div>
+                            </td>
+                            <td>{{ process.entity_name }}</td>
+                            <td><span class="badge text-bg-secondary">{{ process.get_state_display }}</span></td>
+                            <td>
+                                <div>{{ process.modality|default:"-" }}</div>
+                                <div class="text-secondary small">{{ process.process_type|default:"-" }}</div>
+                            </td>
+                            <td>{{ process.bidder_count }}</td>
+                            <td>
+                                {% if process.normative_binding_safe %}
+                                    <div>{{ process.normative_binding_safe.document_type_version.family.name }}</div>
+                                    <div class="text-secondary small">{{ process.normative_binding_safe.document_type_version.version_label }}</div>
+                                {% else %}
+                                    <span class="text-secondary">Sin vinculo</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <a class="btn btn-sm btn-outline-primary" href="{% url 'review:process_detail' process.id %}">Abrir</a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="p-4">
+                                <div class="review-empty p-4 text-center text-secondary">No hay procesos para mostrar.</div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

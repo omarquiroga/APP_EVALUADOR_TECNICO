@@ -1,0 +1,16 @@
+<div class="nav nav-pills flex-column gap-2 review-nav-pills">
+    {% for section_key, section_label in section_labels.items %}
+        <a
+            href="{% url 'review:bidder_dossier' process.id bidder.id %}?section={{ section_key }}"
+            class="nav-link {% if active_section == section_key %}active{% endif %}"
+            data-review-section-link
+            hx-get="{% url 'review:bidder_dossier_section' process.id bidder.id section_key %}"
+            hx-push-url="{% url 'review:bidder_dossier' process.id bidder.id %}?section={{ section_key }}"
+            hx-target="#bidder-section-content"
+            hx-swap="innerHTML"
+            hx-indicator="#section-loading"
+        >
+            {{ section_label }}
+        </a>
+    {% endfor %}
+</div>

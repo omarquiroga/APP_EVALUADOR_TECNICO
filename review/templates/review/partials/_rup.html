@@ -1,0 +1,82 @@
+<div class="review-card bg-white">
+    <div class="review-card-header px-4 py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <div class="review-section-title">{{ section_label }}</div>
+                <div class="fw-semibold">Registros RUP del proponente</div>
+            </div>
+            <span class="badge text-bg-light border">{{ rup_records|length }} registros</span>
+        </div>
+    </div>
+    <div class="card-body">
+        {% for record in rup_records %}
+            <div class="review-card bg-white mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between gap-3 flex-wrap">
+                        <div>
+                            <h3 class="h6 mb-1">RUP v{{ record.version_no }}</h3>
+                            <div class="text-secondary small">{{ record.issuer|default:"Sin emisor" }} / {{ record.record_date|default:"Sin fecha" }}</div>
+                        </div>
+                        <span class="badge text-bg-light border">{{ record.get_review_status_display }}</span>
+                    </div>
+                    {% if record.validity_note %}
+                        <p class="mt-3 mb-0">{{ record.validity_note }}</p>
+                    {% endif %}
+                    <div class="row g-3 mt-1">
+                        <div class="col-12 col-lg-6">
+                            <div class="review-section-title mb-2">Campos capturados</div>
+                            <div class="table-responsive">
+                                <table class="table table-sm review-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Campo</th>
+                                            <th>Valor</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for value in record.field_values.all %}
+                                        <tr>
+                                            <td>{{ value.schema.label }}</td>
+                                            <td>{% if value.value_text %}{{ value.value_text }}{% elif value.value_number is not None %}{{ value.value_number }}{% else %}<span class="text-secondary">-</span>{% endif %}</td>
+                                        </tr>
+                                    {% empty %}
+                                        <tr><td colspan="2" class="text-secondary">Sin campos capturados.</td></tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-3">
+                            <div class="review-section-title mb-2">Segmentos</div>
+                            <ul class="list-group list-group-flush">
+                                {% for segment in record.segments.all %}
+                                    <li class="list-group-item px-0">
+                                        <div class="fw-semibold">{{ segment.segment_code }}</div>
+                                        <div class="text-secondary small">{{ segment.description|default:"Sin descripcion" }}</div>
+                                    </li>
+                                {% empty %}
+                                    <li class="list-group-item px-0 text-secondary">Sin segmentos.</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        <div class="col-12 col-lg-3">
+                            <div class="review-section-title mb-2">Codigos</div>
+                            <ul class="list-group list-group-flush">
+                                {% for code in record.codes.all %}
+                                    <li class="list-group-item px-0">
+                                        <div class="fw-semibold">{{ code.code_type }}: {{ code.code_value }}</div>
+                                        <div class="text-secondary small">{{ code.description|default:"Sin descripcion" }}</div>
+                                    </li>
+                                {% empty %}
+                                    <li class="list-group-item px-0 text-secondary">Sin codigos.</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% empty %}
+            <div class="review-empty p-4 text-center text-secondary">No hay registros RUP para este proponente.</div>
+        {% endfor %}
+    </div>
+</div>

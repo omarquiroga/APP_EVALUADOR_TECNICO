@@ -1,0 +1,15 @@
+TOKEN_APP.txt
+.env
+.env.*
+.venv/
+.venv_repair_test/
+venv/
+venv_broken_20260329/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+node_modules/
+*.tar
+dist/
+build/

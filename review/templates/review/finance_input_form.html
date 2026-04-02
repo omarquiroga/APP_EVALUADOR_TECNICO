@@ -1,0 +1,114 @@
+{% extends 'review/base.html' %}
+
+{% block title %}{{ bidder.name }} | Nuevo insumo financiero{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-12 col-xxl-3">
+        <div class="review-card bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="review-section-title">Nuevo insumo financiero</div>
+                <h1 class="h5 mb-1">{{ bidder.name }}</h1>
+                <p class="text-secondary mb-3">{{ bidder.identification_type }} {{ bidder.identification_number }}</p>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <span class="badge text-bg-secondary">{{ bidder.get_state_display }}</span>
+                    <span class="badge text-bg-light border">{{ process.code }}</span>
+                </div>
+                <dl class="mb-0 small">
+                    <dt class="text-secondary">Proceso</dt>
+                    <dd class="mb-2">{{ process.name }}</dd>
+                    <dt class="text-secondary">Estado del proceso</dt>
+                    <dd class="mb-2">{{ process.get_state_display }}</dd>
+                    <dt class="text-secondary">Estado del nuevo insumo</dt>
+                    <dd class="mb-0"><span class="badge text-bg-primary">Radicado</span></dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="review-card bg-white">
+            <div class="card-body p-4">
+                <div class="review-section-title">Contexto</div>
+                {% if latest_input %}
+                    <div class="small text-secondary mb-2">Último insumo registrado</div>
+                    <div class="fw-semibold mb-1">v{{ latest_input.version_no }} · {{ latest_input.source_label }}</div>
+                    <div class="text-secondary small mb-3">{{ latest_input.source_date|date:"Y-m-d" }}</div>
+                {% else %}
+                    <div class="text-secondary small mb-3">No hay insumos previos para este proponente.</div>
+                {% endif %}
+                <div class="d-grid gap-2">
+                    <a href="{% url 'review:finance_overview' process.id bidder.id %}" class="btn btn-outline-secondary btn-sm">Cancelar y volver</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xxl-9">
+        <div class="review-card bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="review-section-title">Registro controlado</div>
+                <h2 class="h4 mb-1">Registrar nueva versión de insumo financiero</h2>
+                <p class="mb-0 text-secondary">Esta operación crea una nueva versión append-only en estado <strong>Radicado</strong>. No modifica registros financieros anteriores.</p>
+            </div>
+        </div>
+
+        <div class="review-card bg-white">
+            <div class="card-body p-4">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {% for error in form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="{{ form.source_label.id_for_label }}">Origen</label>
+                            {{ form.source_label }}
+                            {% for error in form.source_label.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="{{ form.source_date.id_for_label }}">Fecha de la fuente</label>
+                            {{ form.source_date }}
+                            {% for error in form.source_date.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="{{ form.source_document.id_for_label }}">Documento soporte</label>
+                            {{ form.source_document }}
+                            <div class="form-text">Opcional. Solo aparecen versiones documentales del mismo proceso y proponente.</div>
+                            {% for error in form.source_document.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="{{ form.assets_value.id_for_label }}">Activos</label>
+                            {{ form.assets_value }}
+                            {% for error in form.assets_value.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="{{ form.liabilities_value.id_for_label }}">Pasivos</label>
+                            {{ form.liabilities_value }}
+                            {% for error in form.liabilities_value.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="{{ form.operating_income_value.id_for_label }}">Ingreso operacional</label>
+                            {{ form.operating_income_value }}
+                            {% for error in form.operating_income_value.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="{{ form.financial_observation.id_for_label }}">Observación financiera</label>
+                            {{ form.financial_observation }}
+                            {% for error in form.financial_observation.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-success">Guardar insumo financiero</button>
+                        <a href="{% url 'review:finance_overview' process.id bidder.id %}" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,193 @@
+{% extends 'review/base.html' %}
+
+{% block title %}{{ bidder.name }} | Insumo financiero{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-12 col-xxl-3">
+        <div class="review-card bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="review-section-title">Insumo financiero</div>
+                <h1 class="h5 mb-1">Version {{ financial_input.version_no }}</h1>
+                <p class="text-secondary mb-3">{{ bidder.name }}</p>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <span class="badge text-bg-secondary">{{ financial_input.get_status_display }}</span>
+                    <span class="badge text-bg-light border">{{ process.code }}</span>
+                </div>
+                <dl class="mb-0 small">
+                    <dt class="text-secondary">Fecha fuente</dt>
+                    <dd class="mb-2">{{ financial_input.source_date|date:"Y-m-d" }}</dd>
+                    <dt class="text-secondary">Origen</dt>
+                    <dd class="mb-2">{{ financial_input.source_label }}</dd>
+                    <dt class="text-secondary">Registrado</dt>
+                    <dd class="mb-0">{{ financial_input.created_at|date:"Y-m-d H:i" }}</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="review-card bg-white">
+            <div class="card-body p-4">
+                <div class="review-section-title">Navegacion</div>
+                <div class="d-grid gap-2">
+                    {% if process.state != 'closed' and process.state != 'archived' %}
+                        <a href="{% url 'review:financial_assessment_create' process.id bidder.id financial_input.id %}" class="btn btn-success btn-sm">Crear evaluación financiera</a>
+                    {% endif %}
+                    <a href="{% url 'review:finance_overview' process.id bidder.id %}" class="btn btn-outline-secondary btn-sm">Volver a financiero</a>
+                    <a href="{% url 'review:bidder_dossier' process.id bidder.id %}?section=consolidation" class="btn btn-outline-primary btn-sm">Volver al expediente</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xxl-9">
+        <div class="review-card bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="review-section-title">Detalle</div>
+                <h2 class="h4 mb-1">Detalle del insumo financiero</h2>
+                <p class="mb-0 text-secondary">Vista de solo lectura de la versión financiera registrada para este proceso y proponente.</p>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-md-4">
+                <div class="review-stat">
+                    <div class="review-section-title">Activos</div>
+                    <div class="fs-5 fw-semibold">{{ financial_input.assets_value }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="review-stat">
+                    <div class="review-section-title">Pasivos</div>
+                    <div class="fs-5 fw-semibold">{{ financial_input.liabilities_value }}</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="review-stat">
+                    <div class="review-section-title">Ingreso operacional</div>
+                    <div class="fs-5 fw-semibold">{{ financial_input.operating_income_value }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="review-card bg-white mb-4">
+            <div class="review-card-header px-4 py-3">
+                <div class="review-section-title">Metadatos</div>
+                <div class="fw-semibold">Contexto de la version</div>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <dl class="mb-0">
+                            <dt class="text-secondary">Proceso</dt>
+                            <dd>{{ process.code }} - {{ process.name }}</dd>
+                            <dt class="text-secondary">Proponente</dt>
+                            <dd>{{ bidder.name }}</dd>
+                            <dt class="text-secondary">Origen</dt>
+                            <dd>{{ financial_input.source_label }}</dd>
+                            <dt class="text-secondary">Documento soporte</dt>
+                            <dd>
+                                {% if financial_input.source_document %}
+                                    {{ financial_input.source_document.document.name }} - v{{ financial_input.source_document.version_no }}
+                                {% else %}
+                                    <span class="text-secondary">Sin documento asociado</span>
+                                {% endif %}
+                            </dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <dl class="mb-0">
+                            <dt class="text-secondary">Version</dt>
+                            <dd>{{ financial_input.version_no }}</dd>
+                            <dt class="text-secondary">Supersede</dt>
+                            <dd>
+                                {% if financial_input.supersedes %}
+                                    v{{ financial_input.supersedes.version_no }}
+                                {% else %}
+                                    <span class="text-secondary">Version inicial</span>
+                                {% endif %}
+                            </dd>
+                            <dt class="text-secondary">Creado por</dt>
+                            <dd>
+                                {% if financial_input.created_by %}
+                                    {{ financial_input.created_by }}
+                                {% else %}
+                                    <span class="text-secondary">No registrado</span>
+                                {% endif %}
+                            </dd>
+                            <dt class="text-secondary">Fecha de creacion</dt>
+                            <dd>{{ financial_input.created_at|date:"Y-m-d H:i" }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="review-card bg-white mb-4">
+            <div class="review-card-header px-4 py-3">
+                <div class="review-section-title">Observación</div>
+                <div class="fw-semibold">Comentario financiero</div>
+            </div>
+            <div class="card-body p-4">
+                {% if financial_input.financial_observation %}
+                    <p class="mb-0">{{ financial_input.financial_observation }}</p>
+                {% else %}
+                    <div class="review-empty p-4 text-secondary">No hay observaciones financieras registradas para esta version.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="review-card bg-white">
+            <div class="review-card-header px-4 py-3">
+                <div class="review-section-title">Evaluaciones relacionadas</div>
+                <div class="fw-semibold">Evaluaciones construidas sobre este insumo</div>
+            </div>
+            <div class="card-body p-0">
+                {% if related_assessments %}
+                    <div class="table-responsive">
+                        <table class="table review-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="px-4 py-3">Version</th>
+                                    <th class="py-3">Resultado</th>
+                                    <th class="py-3">Estado</th>
+                                    <th class="py-3">Vigente</th>
+                                    <th class="py-3">Revisado por</th>
+                                    <th class="py-3 pe-4">Fecha</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for assessment in related_assessments %}
+                                    <tr>
+                                        <td class="px-4 py-3">v{{ assessment.version_no }}</td>
+                                        <td>{{ assessment.get_result_code_display }}</td>
+                                        <td>{{ assessment.get_status_display }}</td>
+                                        <td>
+                                            {% if assessment.used_in_consolidation %}
+                                                <span class="badge text-bg-success">Vigente</span>
+                                            {% else %}
+                                                <span class="badge text-bg-light border">No</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if assessment.reviewed_by %}
+                                                {{ assessment.reviewed_by }}
+                                            {% else %}
+                                                <span class="text-secondary">Sin revisor</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="pe-4">{{ assessment.created_at|date:"Y-m-d H:i" }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="p-4">
+                        <div class="review-empty p-4 text-secondary">Este insumo aún no tiene evaluaciones financieras asociadas.</div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

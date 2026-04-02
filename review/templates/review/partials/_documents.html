@@ -1,0 +1,118 @@
+<div class="review-card bg-white">
+    <div class="review-card-header px-4 py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <div class="review-section-title">{{ section_label }}</div>
+                <div class="fw-semibold">Documentos del expediente</div>
+            </div>
+            <span class="badge text-bg-light border">{{ documents|length }} documentos</span>
+        </div>
+    </div>
+    <div class="card-body">
+        <form
+            class="row g-3 align-items-end mb-4"
+            hx-get="{% url 'review:bidder_dossier_section' process.id bidder.id 'documents' %}"
+            hx-target="#bidder-section-content"
+            hx-swap="innerHTML"
+            hx-indicator="#section-loading"
+        >
+            <div class="col-12 col-md-5 col-lg-4">
+                <label for="document-type-filter" class="form-label review-section-title mb-2">Filtrar por tipo documental</label>
+                <select id="document-type-filter" name="document_type" class="form-select">
+                    <option value="">Todos</option>
+                    {% for doc_type in document_type_choices %}
+                        <option value="{{ doc_type }}" {% if current_document_type == doc_type %}selected{% endif %}>{{ doc_type }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-auto">
+                <button type="submit" class="btn btn-outline-primary">Aplicar filtro</button>
+            </div>
+            {% if current_document_type %}
+                <div class="col-12 col-md-auto">
+                    <a
+                        href="{% url 'review:bidder_dossier' process.id bidder.id %}?section=documents"
+                        class="btn btn-link px-0"
+                        hx-get="{% url 'review:bidder_dossier_section' process.id bidder.id 'documents' %}"
+                        hx-push-url="{% url 'review:bidder_dossier' process.id bidder.id %}?section=documents"
+                        hx-target="#bidder-section-content"
+                        hx-swap="innerHTML"
+                        hx-indicator="#section-loading"
+                    >
+                        Limpiar filtro
+                    </a>
+                </div>
+            {% endif %}
+        </form>
+
+        {% for document in documents %}
+            <div class="review-card bg-white mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                        <div>
+                            <h3 class="h6 mb-1">{{ document.name }}</h3>
+                            <div class="text-secondary small">{{ document.document_type }}{% if document.classification %} / {{ document.classification }}{% endif %}</div>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <span class="badge text-bg-light border">{{ document.get_status_display }}</span>
+                            {% if document.is_required %}
+                                <span class="badge text-bg-warning">Requerido</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if document.notes %}
+                        <p class="mt-3 mb-0 text-secondary">{{ document.notes }}</p>
+                    {% endif %}
+                    {% with current_version=document.versions.all|first %}
+                        {% if current_version %}
+                            <div class="mt-3 d-flex flex-wrap gap-2 align-items-center">
+                                <span class="review-section-title mb-0">Version actual</span>
+                                <span class="fw-semibold">{{ current_version.original_filename }}</span>
+                                <span class="badge text-bg-success">v{{ current_version.version_no }}</span>
+                            </div>
+                        {% endif %}
+                    {% endwith %}
+                    <div class="table-responsive mt-3">
+                        <table class="table table-sm review-table align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Version</th>
+                                    <th>Archivo</th>
+                                    <th>Estado</th>
+                                    <th>Paginas</th>
+                                    <th>Hash</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for version in document.versions.all %}
+                                <tr class="{% if version.is_current %}table-success-subtle{% endif %}">
+                                    <td>
+                                        <span class="fw-semibold">v{{ version.version_no }}</span>
+                                        {% if version.is_current %}
+                                            <span class="badge text-bg-success">Actual</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ version.original_filename }}</td>
+                                    <td>{{ version.get_status_display }}</td>
+                                    <td>{{ version.page_count }}</td>
+                                    <td><span class="review-mono">{{ version.file_hash|slice:":16" }}</span></td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="5" class="text-secondary">Sin versiones registradas.</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        {% empty %}
+            <div class="review-empty p-4 text-center text-secondary">
+                {% if current_document_type %}
+                    No hay documentos para este proponente con el tipo documental seleccionado.
+                {% else %}
+                    No hay documentos asociados a este proponente.
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+</div>

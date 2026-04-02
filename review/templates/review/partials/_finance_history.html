@@ -1,0 +1,116 @@
+<div class="review-card bg-white mb-4">
+    <div class="review-card-header px-4 py-3">
+        <div class="review-section-title">Historial de insumos</div>
+        <div class="fw-semibold">Versiones del insumo financiero</div>
+    </div>
+    <div class="card-body p-0">
+        {% if financial_inputs %}
+            <div class="table-responsive">
+                <table class="table review-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="px-4 py-3">Versión</th>
+                            <th class="py-3">Fecha fuente</th>
+                            <th class="py-3">Origen</th>
+                            <th class="py-3">Estado</th>
+                            <th class="py-3">Documento</th>
+                            <th class="py-3 pe-4">Detalle</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for financial_input in financial_inputs %}
+                            <tr{% if forloop.first %} class="table-success-subtle"{% endif %}>
+                                <td class="px-4 py-3">v{{ financial_input.version_no }}</td>
+                                <td>{{ financial_input.source_date|date:"Y-m-d" }}</td>
+                                <td>{{ financial_input.source_label }}</td>
+                                <td>{{ financial_input.get_status_display }}</td>
+                                <td>
+                                    {% if financial_input.source_document %}
+                                        {{ financial_input.source_document.document.name }} · v{{ financial_input.source_document.version_no }}
+                                    {% else %}
+                                        <span class="text-secondary">Sin soporte</span>
+                                    {% endif %}
+                                </td>
+                                <td class="pe-4">
+                                    <div class="d-flex gap-2">
+                                        <a href="{% url 'review:financial_input_detail' process.id bidder.id financial_input.id %}" class="btn btn-outline-secondary btn-sm">
+                                            Ver detalle
+                                        </a>
+                                        {% if process.state != 'closed' and process.state != 'archived' %}
+                                            <a href="{% url 'review:financial_assessment_create' process.id bidder.id financial_input.id %}" class="btn btn-outline-success btn-sm">
+                                                Evaluar
+                                            </a>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="p-4">
+                <div class="review-empty p-4 text-secondary">Todavía no existen insumos financieros registrados para este proponente.</div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="review-card bg-white">
+    <div class="review-card-header px-4 py-3">
+        <div class="review-section-title">Historial de evaluaciones</div>
+        <div class="fw-semibold">Evaluaciones financieras registradas</div>
+    </div>
+    <div class="card-body p-0">
+        {% if financial_assessments %}
+            <div class="table-responsive">
+                <table class="table review-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="px-4 py-3">Versión</th>
+                            <th class="py-3">Resultado</th>
+                            <th class="py-3">Estado</th>
+                            <th class="py-3">Insumo</th>
+                            <th class="py-3">Vigente</th>
+                            <th class="py-3">Revisado por</th>
+                            <th class="py-3 pe-4">Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for assessment in financial_assessments %}
+                            <tr{% if assessment.used_in_consolidation %} class="table-success-subtle"{% endif %}>
+                                <td class="px-4 py-3">v{{ assessment.version_no }}</td>
+                                <td>{{ assessment.get_result_code_display }}</td>
+                                <td>{{ assessment.get_status_display }}</td>
+                                <td>
+                                    <a href="{% url 'review:financial_input_detail' process.id bidder.id assessment.financial_input_version.id %}">
+                                        v{{ assessment.financial_input_version.version_no }}
+                                    </a>
+                                </td>
+                                <td>
+                                    {% if assessment.used_in_consolidation %}
+                                        <span class="badge text-bg-success">Vigente</span>
+                                    {% else %}
+                                        <span class="badge text-bg-light border">No</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if assessment.reviewed_by %}
+                                        {{ assessment.reviewed_by }}
+                                    {% else %}
+                                        <span class="text-secondary">Sin revisor</span>
+                                    {% endif %}
+                                </td>
+                                <td class="pe-4">{{ assessment.created_at|date:"Y-m-d H:i" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="p-4">
+                <div class="review-empty p-4 text-secondary">Todavía no existen evaluaciones financieras para este proponente.</div>
+            </div>
+        {% endif %}
+    </div>
+</div>

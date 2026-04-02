@@ -1,0 +1,57 @@
+{% extends 'review/base.html' %}
+
+{% block title %}{{ bidder.name }} | Financiero{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-12 col-xxl-3">
+        <div class="review-card bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="review-section-title">Contexto financiero</div>
+                <h1 class="h4 mb-1">{{ bidder.name }}</h1>
+                <p class="text-secondary mb-3">{{ bidder.identification_type }} {{ bidder.identification_number }}</p>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <span class="badge text-bg-secondary">{{ bidder.get_state_display }}</span>
+                    <span class="badge text-bg-light border">{{ process.code }}</span>
+                </div>
+                <dl class="mb-0 small">
+                    <dt class="text-secondary">Proceso</dt>
+                    <dd class="mb-2">{{ process.name }}</dd>
+                    <dt class="text-secondary">Insumos financieros</dt>
+                    <dd class="mb-2">{{ financial_inputs|length }}</dd>
+                    <dt class="text-secondary">Evaluaciones financieras</dt>
+                    <dd class="mb-0">{{ financial_assessments|length }}</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="review-card bg-white">
+            <div class="card-body p-4">
+                <div class="review-section-title">Navegacion</div>
+                <div class="d-grid gap-2">
+                    {% if process.state != 'closed' and process.state != 'archived' %}
+                        <a href="{% url 'review:financial_input_create' process.id bidder.id %}" class="btn btn-success btn-sm">Registrar nuevo insumo</a>
+                    {% else %}
+                        <button class="btn btn-outline-secondary btn-sm" disabled>Proceso sin registro habilitado</button>
+                    {% endif %}
+                    <a href="{% url 'review:bidder_dossier' process.id bidder.id %}" class="btn btn-outline-secondary btn-sm">Volver al expediente</a>
+                    <a href="/admin/finance/financialinputversion/" class="btn btn-outline-primary btn-sm">Abrir financiero en admin</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xxl-9">
+        <div class="review-card bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="review-section-title">Revision operativa</div>
+                <h2 class="h4 mb-1">Contexto financiero del proponente</h2>
+                <p class="mb-0 text-secondary">Lectura consolidada de la evaluación financiera vigente, el último insumo registrado y el historial financiero del expediente.</p>
+            </div>
+        </div>
+
+        {% include 'review/partials/_finance_summary.html' %}
+        {% include 'review/partials/_finance_history.html' %}
+    </div>
+</div>
+{% endblock %}

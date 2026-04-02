@@ -1,0 +1,58 @@
+{% extends 'review/base.html' %}
+
+{% block title %}Proponentes | {{ process.code }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-end mb-4">
+    <div>
+        <div class="review-section-title">Proceso</div>
+        <h1 class="h3 mb-1">Proponentes de {{ process.code }}</h1>
+        <p class="text-secondary mb-0">{{ process.name }}</p>
+    </div>
+    <a href="{% url 'review:process_detail' process.id %}" class="btn btn-outline-secondary">Volver al proceso</a>
+</div>
+
+<div class="review-card bg-white">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle review-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Proponente</th>
+                        <th>Estado</th>
+                        <th>Integrantes</th>
+                        <th>Documentos</th>
+                        <th>Validaciones</th>
+                        <th>Causales</th>
+                        <th class="text-end">Expediente</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bidder in bidders %}
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">{{ bidder.name }}</div>
+                                <div class="text-secondary small">{{ bidder.identification_type }} {{ bidder.identification_number }}</div>
+                            </td>
+                            <td><span class="badge text-bg-secondary">{{ bidder.get_state_display }}</span></td>
+                            <td>{{ bidder.member_count }}</td>
+                            <td>{{ bidder.document_count }}</td>
+                            <td>{{ bidder.validation_count }}</td>
+                            <td>{{ bidder.causal_count }}</td>
+                            <td class="text-end">
+                                <a href="{% url 'review:bidder_dossier' process.id bidder.id %}" class="btn btn-sm btn-primary">Abrir expediente</a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="p-4">
+                                <div class="review-empty p-4 text-center text-secondary">No hay proponentes registrados para este proceso.</div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
