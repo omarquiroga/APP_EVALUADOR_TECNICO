@@ -4,6 +4,7 @@ import contextlib
 
 import uvicorn
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
@@ -23,11 +24,28 @@ settings = get_settings()
 store = SessionStore(settings.state_dir, settings.log_dir)
 runner = CodexRunner(settings, store)
 
+transport_security = TransportSecuritySettings(
+    # Quick tunnels like trycloudflare rotate hostname on each restart, so
+    # a static allowlist becomes brittle during local development.
+    enable_dns_rebinding_protection=False,
+    allowed_hosts=[
+        "localhost:*",
+        "127.0.0.1:*",
+        "surveillance-personal-representatives-storm.trycloudflare.com:*",
+    ],
+    allowed_origins=[
+        "http://localhost:*",
+        "http://127.0.0.1:*",
+        "https://surveillance-personal-representatives-storm.trycloudflare.com",
+    ],
+)
+
 mcp = FastMCP(
     "evaluador-tecnico-automation",
     stateless_http=True,
     json_response=True,
     streamable_http_path="/",
+    transport_security=transport_security,
 )
 
 
@@ -79,7 +97,12 @@ starlette_app = Starlette(
 
 app = CORSMiddleware(
     starlette_app,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost",
+        "http://127.0.0.1",
+        "https://surveillance-personal-representatives-storm.trycloudflare.com",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["Mcp-Session-Id"],

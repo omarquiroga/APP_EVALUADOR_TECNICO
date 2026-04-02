@@ -92,6 +92,8 @@ https://<subdominio-publico>/mcp
 
 ChatGPT no debe conectarse a `localhost`; siempre debe usarse una URL publica HTTPS terminada exactamente en `/mcp`.
 
+Si se usa un tunel publico distinto, el host HTTPS de ese tunel debe estar permitido en la configuracion `transport_security` del servidor MCP (`allowed_hosts` y `allowed_origins`) para evitar errores como `Invalid Host header`. En desarrollo con `trycloudflare`, como el subdominio cambia en cada arranque, la proteccion de DNS rebinding puede desactivarse temporalmente para no bloquear `/mcp`.
+
 Unico paso manual final en ChatGPT web:
 
 1. Crear o editar la conexion MCP y registrar la URL publica final con forma `https://<subdominio-publico>/mcp`.
