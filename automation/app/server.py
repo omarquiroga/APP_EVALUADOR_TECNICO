@@ -50,11 +50,15 @@ def get_eval_task_status(session_id: str) -> dict:
 
 
 async def healthcheck(_: object) -> JSONResponse:
+    codex_probe = runner.probe_command()
     return JSONResponse(
         {
             "status": "ok",
             "mcp_path": settings.mcp_path,
             "default_workspace": str(settings.default_workspace),
+            "codex_command": codex_probe["command"],
+            "codex_command_ok": codex_probe["ok"],
+            "codex_command_detail": codex_probe["detail"],
         }
     )
 

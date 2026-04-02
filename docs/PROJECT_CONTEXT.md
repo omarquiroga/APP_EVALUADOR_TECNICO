@@ -17,6 +17,7 @@ Adicion tecnica nueva en esta V1:
 
 - carpeta `automation/` fuera del runtime Django
 - servidor MCP Python minimo montado en `/mcp`
+- `healthcheck` HTTP con diagnostico del comando de Codex
 - ejecucion de tareas mediante Codex CLI sobre el mismo workspace del repo
 - estado local persistido en JSON para sesiones de automatizacion
 
@@ -35,6 +36,9 @@ Estado confirmado a la fecha de este documento:
   - creacion y confirmacion controlada de `FinancialAssessment`
   - permisos finos iniciales por accion en Finance dentro de `review`
 - `automation/` implementado como V1 minima para disparar y continuar tareas de Codex desde un futuro cliente MCP conectado a ChatGPT
+- defaults operativos de automatizacion:
+  - estado local en `automation/.state`
+  - logs locales en `automation/logs`
 
 ## Modulos implementados
 
@@ -79,3 +83,9 @@ Endpoint previsto para el futuro cliente MCP:
 
 - local para pruebas del operador: `http://127.0.0.1:8765/mcp`
 - para ChatGPT: URL publica HTTPS terminada en `/mcp`, por ejemplo `https://<subdominio-publico>/mcp`
+
+Validacion operativa reciente:
+
+- `run.ps1` levanta el servidor en `127.0.0.1:8765`
+- `/health` responde OK y reporta si el comando local de Codex es ejecutable
+- en este host concreto, el comando `codex` responde `Acceso denegado.` al precheck y por eso las tareas fallan antes de ejecutarse

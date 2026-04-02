@@ -72,6 +72,31 @@ class CodexRunner:
         session["log_tail"] = self.store.get_log_tail(session_id)
         return session
 
+    def probe_command(self) -> dict[str, Any]:
+        command = f"{_quote(self.settings.codex_command)} --version"
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                shell=True,
+                timeout=15,
+            )
+        except Exception as exc:
+            return {
+                "ok": False,
+                "command": self.settings.codex_command,
+                "detail": str(exc),
+            }
+
+        output = (completed.stdout or completed.stderr or "").strip()
+        detail = output or f"returncode={completed.returncode}"
+        return {
+            "ok": completed.returncode == 0,
+            "command": self.settings.codex_command,
+            "detail": detail,
+        }
+
     def _launch(
         self,
         session_id: str,
@@ -108,6 +133,7 @@ class CodexRunner:
         log_path = Path(session["log_path"])
         log_path.parent.mkdir(parents=True, exist_ok=True)
         started_at = utc_now_iso()
+        probe = self.probe_command()
 
         self.store.update_session(
             session_id,
@@ -121,6 +147,21 @@ class CodexRunner:
         try:
             with log_path.open("a", encoding="utf-8", errors="replace") as handle:
                 handle.write(f"[{started_at}] COMMAND {command}\n")
+                if not probe["ok"]:
+                    handle.write(f"[{started_at}] PRECHECK {probe['detail']}\n")
+                    handle.flush()
+                    self.store.update_session(
+                        session_id,
+                        status="failed",
+                        completed_at=utc_now_iso(),
+                        pid=None,
+                        exit_code=127,
+                        error=(
+                            "No fue posible ejecutar el comando de Codex configurado. "
+                            f"Detalle: {probe['detail']}"
+                        ),
+                    )
+                    return
                 handle.flush()
 
                 process = subprocess.Popen(

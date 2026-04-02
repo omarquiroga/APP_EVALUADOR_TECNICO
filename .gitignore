@@ -13,3 +13,9 @@ node_modules/
 *.tar
 dist/
 build/
+automation/.env
+automation/.venv/
+automation/logs/
+automation/*.log
+automation/.state/
+automation/sessions.json

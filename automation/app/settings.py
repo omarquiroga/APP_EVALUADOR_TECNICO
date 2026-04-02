@@ -36,6 +36,15 @@ def _split_paths(raw_value: str | None, default: list[Path]) -> tuple[Path, ...]
     return tuple(paths)
 
 
+def _env_value(name: str, default: str) -> str:
+    value = os.getenv(name)
+    if value is None:
+        return default
+
+    normalized = value.strip()
+    return normalized or default
+
+
 @dataclass(frozen=True)
 class AppSettings:
     host: str
@@ -77,8 +86,8 @@ def get_settings() -> AppSettings:
         [default_workspace],
     )
 
-    state_dir = Path(os.getenv("AUTOMATION_STATE_DIR", str(AUTOMATION_ROOT / ".state"))).resolve()
-    log_dir = Path(os.getenv("AUTOMATION_LOG_DIR", str(AUTOMATION_ROOT / "logs"))).resolve()
+    state_dir = Path(_env_value("AUTOMATION_STATE_DIR", str(AUTOMATION_ROOT / ".state"))).resolve()
+    log_dir = Path(_env_value("AUTOMATION_LOG_DIR", str(AUTOMATION_ROOT / "logs"))).resolve()
 
     return AppSettings(
         host=os.getenv("AUTOMATION_HOST", "127.0.0.1"),

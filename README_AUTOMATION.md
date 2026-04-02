@@ -51,3 +51,34 @@ https://abc123.ngrok-free.app/mcp
 - Si `ngrok` no esta instalado en el equipo, hay que instalarlo primero o usar otro tunel HTTPS equivalente.
 - ChatGPT no debe apuntar a `localhost`.
 - La URL registrada debe terminar exactamente en `/mcp`.
+
+## Bloque final operativo
+
+Arranque del servidor MCP:
+
+```powershell
+Set-Location "C:\PROYECTOS\Evaluador Tecnico LFVU\automation"
+& ".\run.ps1"
+```
+
+El servidor queda escuchando localmente en `http://127.0.0.1:8765`, con `healthcheck` en `http://127.0.0.1:8765/health` y el endpoint MCP montado en `http://127.0.0.1:8765/mcp` que redirige a `http://127.0.0.1:8765/mcp/`.
+
+En `http://127.0.0.1:8765/health` debe verse `codex_command_ok: true` para confirmar que el runner tambien puede ejecutar Codex. Si aparece `false`, hay que ajustar `CODEX_COMMAND` en `automation/.env` a un comando realmente invocable en ese equipo.
+
+Abrir el tunel HTTPS:
+
+```powershell
+ngrok http 8765
+```
+
+URL exacta a registrar en ChatGPT:
+
+```text
+https://<subdominio-publico>/mcp
+```
+
+ChatGPT no debe conectarse a `localhost`; siempre debe usarse una URL publica HTTPS terminada exactamente en `/mcp`.
+
+Unico paso manual final en ChatGPT web:
+
+1. Crear o editar la conexion MCP y registrar la URL publica final con forma `https://<subdominio-publico>/mcp`.
