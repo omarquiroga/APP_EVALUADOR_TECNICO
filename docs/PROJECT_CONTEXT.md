@@ -13,6 +13,13 @@ Patron de interfaz confirmado:
 
 No existe API separada ni SPA. React y Vue fueron descartados para esta fase.
 
+Adicion tecnica nueva en esta V1:
+
+- carpeta `automation/` fuera del runtime Django
+- servidor MCP Python minimo montado en `/mcp`
+- ejecucion de tareas mediante Codex CLI sobre el mismo workspace del repo
+- estado local persistido en JSON para sesiones de automatizacion
+
 ## Estado funcional
 
 Estado confirmado a la fecha de este documento:
@@ -27,18 +34,14 @@ Estado confirmado a la fecha de este documento:
   - alta controlada de `FinancialInputVersion`
   - creacion y confirmacion controlada de `FinancialAssessment`
   - permisos finos iniciales por accion en Finance dentro de `review`
-
-Validacion confirmada en este hilo:
-
-- `manage.py check` OK
-- `manage.py makemigrations --check --dry-run` OK
-- `manage.py test` OK
+- `automation/` implementado como V1 minima para disparar y continuar tareas de Codex desde un futuro cliente MCP conectado a ChatGPT
 
 ## Modulos implementados
 
+- `common`: utilidades y base comun del proyecto
 - `procurement`: contexto del proceso contractual
 - `normative`: snapshots y binding normativo
-- `rules`: definiciones/versiones de reglas
+- `rules`: definiciones y versiones de reglas
 - `bidders`: proponentes e integrantes
 - `documents`: documentos, versiones y referencias
 - `rup`: informacion RUP
@@ -55,25 +58,23 @@ Validacion confirmada en este hilo:
 
 - revision humana obligatoria en puntos sensibles
 - no automatizar decisiones juridicas complejas
-- no borrar historicos/versiones como flujo normal
-- append-only en entidades sensibles/versionadas
+- no borrar historicos o versiones como flujo normal
+- append-only en entidades sensibles o versionadas
 - bloquear escritura en procesos `closed` o `archived`
 - mantener cambios pequenos y bien validados
+- la automatizacion V1 no debe modificar el dominio por integracion directa; solo dispara trabajo a Codex CLI
+- la automatizacion V1 depende de una instalacion local funcional de Codex CLI y de autenticacion local ya resuelta fuera del repo
 
-## Permisos actuales en Finance
+## Arranque local de automatizacion en Windows
 
-Primera capa de permisos finos confirmada solo para Finance en `review`:
+```powershell
+Set-Location "C:\PROYECTOS\Evaluador Tecnico LFVU\automation"
+Copy-Item .env.example .env -Force
+C:\Python314\python.exe -m venv .\.venv
+& '.\.venv\Scripts\python.exe' -m pip install -r .\requirements.txt
+& '.\run.ps1'
+```
 
-- lectura financiera:
-  - `finance.view_financialinputversion`
-  - `finance.view_financialassessment`
-- registro de insumos:
-  - lectura financiera
-  - `finance.add_financialinputversion`
-- confirmacion de evaluacion:
-  - lectura financiera
-  - `finance.add_financialassessment`
+Endpoint previsto para el futuro cliente MCP:
 
-Inferencia marcada:
-
-- A futuro, estos permisos pueden mapearse facilmente a grupos estables de operacion, pero en el estado actual la implementacion usa checks directos con permisos estandar de Django.
+- `http://127.0.0.1:8765/mcp`

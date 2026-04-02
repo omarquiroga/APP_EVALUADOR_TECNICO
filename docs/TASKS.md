@@ -1,61 +1,35 @@
 # Tasks
 
-## Backlog actual
+## Backlog tecnico actual
 
-### Prioridad alta
-
+- Consolidar la V1 de automatizacion MCP con pruebas de integracion controladas en un entorno donde Codex CLI pueda ejecutarse sin restricciones del host.
 - Definir el siguiente modulo fuera del admin despues de Finance.
-- Decidir si la siguiente fase debe ser:
+- Decidir si la siguiente fase funcional debe priorizar:
   - endurecimiento adicional de permisos
-  - nuevo flujo controlado en `Documents`
-  - nuevo flujo controlado en `RUP`
+  - nuevo flujo controlado en `documents`
+  - nuevo flujo controlado en `rup`
 
-### Prioridad media
+## Tareas abiertas
 
+- Conectar la futura app MCP de ChatGPT al endpoint local `/mcp`.
+- Validar en un equipo operador el comando exacto de continuacion de Codex si el CLI cambia de version.
+- Definir si la automatizacion debe restringirse a un solo workspace o a una allowlist corta.
+- Evaluar si conviene emitir artefactos mas estructurados por tarea, por ejemplo resumen final, logs separados o metadatos de commit.
 - Normalizar textos visibles fuera de Finance donde aun queden inconsistencias de espanol operativo o codificacion.
-- Evaluar si conviene documentar un mapeo estable de grupos Django para Finance.
-- Revisar si hace falta un documento corto de invariantes para otros modelos sensibles ademas de Finance.
 
-### Prioridad baja
+## Riesgos
 
-- Mejoras UX menores en `review` solo si aparecen fricciones reales en uso o validacion.
+- La V1 depende de que Codex CLI este instalado y autenticado localmente fuera del repo.
+- En este entorno de desarrollo la invocacion directa de `codex.exe` desde PowerShell puede estar restringida; por eso el comando queda configurable por `.env`.
+- El estado de tareas corre en JSON local y memoria del proceso, asi que un reinicio del servidor durante una ejecucion puede dejar sesiones en estado intermedio hasta reconciliacion manual.
+- Si se abre otro flujo de escritura sin repetir el patron de permisos, puede reintroducir dependencia de `login_required` como unico control.
 
-## Tareas abiertas confirmadas
+## Siguiente paso recomendado
 
-- No existe todavia otro flujo de escritura fuera de Finance en `review`.
-- No hay sistema global de permisos finos para todos los modulos.
-- No hay API separada ni frontend SPA.
+Conectar ChatGPT web o la futura app MCP al endpoint local `http://127.0.0.1:8765/mcp` y probar un flujo corto con:
 
-## Riesgos actuales
+1. `start_eval_task`
+2. `get_eval_task_status`
+3. `continue_eval_task`
 
-- Si se abre otro flujo sin repetir el patron de permisos, puede reintroducir dependencia de `login_required` como unico control.
-- Todavia hay algunos templates con problemas de codificacion/acentos heredados.
-- La configuracion de grupos por rol no esta persistida todavia como seed o comando; la base tecnica actual usa permisos estandar y tests.
-
-## Proximos pasos sugeridos
-
-### Recomendacion principal
-
-Abrir el siguiente flujo controlado fuera del admin en un modulo menos sensible que `evaluation`.
-
-Opciones recomendadas:
-
-- `Documents`
-- `RUP`
-
-### Secuencia sugerida
-
-1. elegir un solo modulo siguiente
-2. hacer diagnostico corto del estado real
-3. definir solo lectura o escritura controlada minima
-4. replicar patron de:
-   - contexto `process -> bidder -> modulo`
-   - restricciones operativas
-   - permisos minimos
-   - tests
-
-## Vacios pendientes de confirmacion
-
-- Cual sera el siguiente modulo priorizado por negocio.
-- Si conviene formalizar grupos Django persistentes desde ahora o mantener permisos directos por mas tiempo.
-- Si se quiere una ronda dedicada de saneamiento de codificacion de templates antes de abrir otro flujo.
+Si ese flujo queda estable en el equipo operador, la siguiente mejora deberia ser endurecer la persistencia y el seguimiento de sesiones en `automation/` antes de ampliar alcance funcional.

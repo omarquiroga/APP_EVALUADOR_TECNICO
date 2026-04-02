@@ -1,22 +1,23 @@
 # Decisions
 
-## Decisiones confirmadas
+## Decisiones tecnicas detectadas
 
-### Arquitectura
+### Arquitectura principal
 
 - Django monolito modular.
 - PostgreSQL como base principal.
 - Django templates + HTMX para la UI operativa.
-- Django Admin como canal de carga/edicion controlada.
+- Django Admin como canal de carga y edicion controlada.
 - `review` como espacio de operacion fuera del admin solo donde el admin ya no basta.
 
-### Alcance descartado
+### Automatizacion V1
 
-- No crear API separada.
-- No migrar a SPA.
-- No introducir React o Vue.
-- No abrir edicion libre general fuera del admin.
-- No extender aun un sistema grande de roles globales.
+- La automatizacion se implementa fuera del runtime Django, en `automation/`.
+- El servidor expone un MCP HTTP minimo en la ruta `/mcp`.
+- La automatizacion usa Codex CLI como motor de ejecucion en lugar de integrar logica de negocio dentro del servidor MCP.
+- El estado de sesiones se persiste en archivos JSON locales para mantener la base simple y sin base adicional.
+- La continuacion de sesiones usa el identificador local de la sesion y, cuando se detecta, el `codex_session_id` observado en `~/.codex/sessions`.
+- La configuracion operativa se resuelve desde variables de entorno y `.env`, sin secretos versionados.
 
 ### Dominio y seguridad operativa
 
@@ -33,44 +34,26 @@
 - Finance fue el primer flujo de escritura fuera del admin.
 - La UI visible de Finance se normalizo al espanol operativo.
 
-### Fase 2B de Finance
-
-Decisiones cerradas e implementadas en este hilo:
-
-- `used_in_consolidation` ya no es editable en el formulario.
-- Al confirmar un nuevo assessment:
-  - `status = confirmed`
-  - `used_in_consolidation = True`
-- Si existe assessment vigente anterior:
-  - queda `obsolete`
-  - queda con `used_in_consolidation = False`
-  - el nuevo assessment lo referencia en `supersedes`
-- `supersedes` apunta al vigente reemplazado, no al ultimo cualquiera.
-- `reviewed_by` y `reviewed_at` se asignan siempre en ese flujo.
-
-### Permisos finos
-
-Primera capa de permisos finos aprobada e implementada solo en Finance dentro de `review`:
-
-- lectura separada de escritura
-- permiso especifico para registrar insumos
-- permiso especifico para confirmar evaluaciones
-- implementacion con permisos estandar de Django y checks directos en vistas
-
-## Convenciones acordadas
+## Convenciones
 
 - Validar primero el estado real del repo antes de cambios grandes.
-- Plan corto antes de implementar cambios de alcance no trivial.
-- Mantener superficie de cambio pequena.
-- Reportar siempre validacion tecnica despues de cambios funcionales.
-- Usar Playwright cuando se necesite validar UI real.
+- Mantener superficie de cambio pequena y reversible.
+- Documentar decisiones operativas nuevas en `docs/`.
+- No introducir nuevos secretos en git.
+- Preferir rutas locales explicitas en Windows para arranque operativo.
+- Mantener la automatizacion como adaptador tecnico y no como nueva capa de dominio.
+- Permitir configuracion por variables de entorno cuando el CLI local varie entre equipos.
 
-## Cosas descartadas y por que
+## Descartes razonables
 
-- Sistema de roles grande en esta fase: descartado para no abrir complejidad transversal innecesaria.
-- Apertura de otro modulo fuera del admin antes de cerrar Finance: descartado para evitar deriva.
-- Cambios amplios de dominio: descartados salvo ajuste minimo imprescindible.
+- No crear frontend para la automatizacion en esta fase.
+- No crear API REST propia aparte del endpoint MCP.
+- No introducir una cola externa, Redis o base de datos dedicada para la V1.
+- No acoplar el servidor MCP a modelos Django ni a permisos del dominio mientras solo se necesite disparo de tareas de Codex.
+- No asumir un contrato demasiado rigido del CLI de Codex; por eso la composicion de comandos queda parametrizable.
+- No extender aun un sistema grande de roles globales.
 
 ## Inferencias marcadas
 
-- Es razonable consolidar grupos de Django para Finance sobre los permisos ya definidos, pero esa configuracion no quedo automatizada en el codigo actual.
+- Es razonable que una futura app MCP para ChatGPT consuma `start_eval_task`, `continue_eval_task` y `get_eval_task_status` como primera capa suficiente.
+- Es razonable que una V2 reemplace el almacenamiento JSON por una persistencia mas robusta si se necesita resiliencia tras reinicios del servidor.

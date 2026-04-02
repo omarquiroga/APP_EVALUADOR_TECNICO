@@ -23,6 +23,7 @@ El sistema no reemplaza el juicio profesional ni automatiza decisiones juridicas
 - HTMX
 - Bootstrap por CDN
 - Playwright para validacion local de UI
+- MCP server Python minimo en `automation/` para disparo remoto de tareas via Codex CLI
 
 ## Modulos principales
 
@@ -42,14 +43,6 @@ El sistema no reemplaza el juicio profesional ni automatiza decisiones juridicas
 - `audit`
 - `review`
 
-## Estado funcional resumido
-
-- Dominio base modelado y migrado.
-- Admin endurecido con politicas de lectura, add-only o no-delete segun el modelo.
-- `review` implementado como consola operativa fuera del admin.
-- Finance implementado como primer flujo de escritura controlada fuera del admin.
-- Permisos finos iniciales aplicados solo a Finance en `review`.
-
 ## Comandos de arranque y validacion
 
 Variables tipicas en PowerShell:
@@ -63,7 +56,7 @@ $env:POSTGRES_HOST="localhost"
 $env:POSTGRES_PORT="5432"
 ```
 
-Entorno:
+Entorno principal:
 
 ```powershell
 Set-Location "C:\PROYECTOS\Evaluador Tecnico LFVU"
@@ -77,7 +70,7 @@ Base de datos:
 docker start postgres-evaluador
 ```
 
-Validacion:
+Validacion del proyecto:
 
 ```powershell
 $env:DJANGO_SETTINGS_MODULE="settings_test"
@@ -86,7 +79,7 @@ $env:DJANGO_SETTINGS_MODULE="settings_test"
 & '.\venv\Scripts\python.exe' manage.py test
 ```
 
-Servidor local:
+Servidor local Django:
 
 ```powershell
 $env:DJANGO_SETTINGS_MODULE="settings_admin"
@@ -100,13 +93,25 @@ Playwright local:
 & '.\node_modules\.bin\playwright.cmd' install chromium
 ```
 
+Servidor MCP de automatizacion en Windows:
+
+```powershell
+Set-Location "C:\PROYECTOS\Evaluador Tecnico LFVU\automation"
+Copy-Item .env.example .env -Force
+C:\Python314\python.exe -m venv .\.venv
+& '.\.venv\Scripts\python.exe' -m pip install -r .\requirements.txt
+& '.\run.ps1'
+```
+
 ## Reglas de intervencion minima
 
 - Confirmar primero el estado real del repo antes de cambios grandes.
 - Preferir cambios pequenos, locales y reversibles.
 - No cambiar dominio salvo ajuste minimo imprescindible.
-- No abrir nuevos flujos sin plan corto previo.
+- No abrir nuevos flujos fuera del admin sin plan corto previo.
 - Mantener `review` como lugar de lectura/escritura controlada fuera del admin.
+- Mantener `automation/` desacoplado del dominio Django salvo lectura de contexto del repo y ejecucion de Codex CLI.
+- No introducir secretos en commits ni en archivos de ejemplo.
 - Validar con `check`, `makemigrations --check --dry-run` y `test` despues de cambios funcionales.
 - Si hay UI impactada, validar tambien en navegador con Playwright cuando sea viable.
 
@@ -119,6 +124,7 @@ Playwright local:
 - borrado de historicos/versiones como solucion rapida
 - migraciones o refactors amplios no solicitados
 - cambios globales de roles/permisos fuera del modulo objetivo
+- acoplar automatizacion nueva a secretos locales o tokens embebidos
 
 ## Criterio de hecho
 
@@ -129,4 +135,5 @@ Una tarea se considera hecha cuando:
 - `manage.py check` pasa
 - `manage.py makemigrations --check --dry-run` pasa
 - `manage.py test` pasa
+- la automatizacion nueva queda arrancable en Windows con `.env` local sin secretos en git
 - cualquier decision nueva queda documentada si afecta continuidad
