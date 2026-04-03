@@ -19,10 +19,13 @@ class SessionStore:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_path = self.state_dir / "sessions.json"
+        self.orchestrations_path = self.state_dir / "orchestrations.json"
         self._lock = threading.Lock()
 
         if not self.sessions_path.exists():
             self.sessions_path.write_text("{}", encoding="utf-8")
+        if not self.orchestrations_path.exists():
+            self.orchestrations_path.write_text("{}", encoding="utf-8")
 
     def create_session(self, prompt: str, workspace: Path) -> dict[str, Any]:
         session_id = uuid.uuid4().hex
@@ -80,12 +83,72 @@ class SessionStore:
         content = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
         return "\n".join(content[-lines:])
 
+    def create_orchestration(
+        self,
+        *,
+        objective: str,
+        workspace: Path,
+        constraints: str | None,
+        validations: list[str],
+        max_iterations: int,
+        timeout_seconds: int,
+    ) -> dict[str, Any]:
+        orchestration_id = uuid.uuid4().hex
+        now = utc_now_iso()
+        record = {
+            "orchestration_id": orchestration_id,
+            "status": "pending",
+            "objective": objective,
+            "workspace": str(workspace),
+            "constraints": constraints,
+            "validations": validations,
+            "max_iterations": max_iterations,
+            "timeout_seconds": timeout_seconds,
+            "created_at": now,
+            "updated_at": now,
+            "completed_at": None,
+            "iterations": [],
+            "session_ids": [],
+            "final_result": None,
+            "error": None,
+        }
+        with self._lock:
+            orchestrations = self._read_json_unlocked(self.orchestrations_path)
+            orchestrations[orchestration_id] = record
+            self._write_json_unlocked(self.orchestrations_path, orchestrations)
+        return record
+
+    def get_orchestration(self, orchestration_id: str) -> dict[str, Any]:
+        with self._lock:
+            orchestrations = self._read_json_unlocked(self.orchestrations_path)
+            try:
+                return dict(orchestrations[orchestration_id])
+            except KeyError as exc:
+                raise KeyError(f"Orquestacion no encontrada: {orchestration_id}") from exc
+
+    def update_orchestration(self, orchestration_id: str, **changes: Any) -> dict[str, Any]:
+        with self._lock:
+            orchestrations = self._read_json_unlocked(self.orchestrations_path)
+            if orchestration_id not in orchestrations:
+                raise KeyError(f"Orquestacion no encontrada: {orchestration_id}")
+
+            orchestrations[orchestration_id].update(changes)
+            orchestrations[orchestration_id]["updated_at"] = utc_now_iso()
+            self._write_json_unlocked(self.orchestrations_path, orchestrations)
+            return dict(orchestrations[orchestration_id])
+
     def _read_all_unlocked(self) -> dict[str, Any]:
-        raw = self.sessions_path.read_text(encoding="utf-8")
-        return json.loads(raw or "{}")
+        return self._read_json_unlocked(self.sessions_path)
 
     def _write_all_unlocked(self, sessions: dict[str, Any]) -> None:
-        self.sessions_path.write_text(
-            json.dumps(sessions, indent=2, sort_keys=True),
+        self._write_json_unlocked(self.sessions_path, sessions)
+
+    def _read_json_unlocked(self, path: Path) -> dict[str, Any]:
+        raw = path.read_text(encoding="utf-8")
+        return json.loads(raw or "{}")
+
+    def _write_json_unlocked(self, path: Path, payload: dict[str, Any]) -> None:
+        path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True),
             encoding="utf-8",
         )

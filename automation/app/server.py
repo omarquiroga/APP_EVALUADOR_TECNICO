@@ -46,9 +46,10 @@ transport_security = TransportSecuritySettings(
 mcp = FastMCP(
     "evaluador-tecnico-automation",
     instructions=(
-        "Prefer the high-level tools when the user wants to implement, fix, validate, or evolve the "
-        "project from a business objective. Keep the low-level tools for debugging, manual orchestration, "
-        "or advanced recovery workflows."
+        "Prefer the orchestration tools when the user wants the system to plan, execute, review, and "
+        "iterate on a business objective until completion. Use the simpler high-level tools when a single "
+        "Codex execution is enough. Keep the low-level tools for debugging, manual orchestration, or "
+        "advanced recovery workflows."
     ),
     stateless_http=True,
     json_response=True,
@@ -125,6 +126,57 @@ def continue_eval_task_and_wait(
 def review_eval_result(session_id: str, focus: str | None = None) -> dict:
     """Use this when ChatGPT needs a high-level synthesis or audit of a previous session, including status, summary, validations, risks, and whether to continue or close."""
     return orchestrator.review_result(session_id=session_id, focus=focus)
+
+
+@mcp.tool()
+def run_goal_until_done(
+    objective: str,
+    constraints: str | None = None,
+    validations: list[str] | None = None,
+    workspace: str | None = None,
+    max_iterations: int = 4,
+    timeout_seconds: int = 900,
+) -> dict:
+    """Use this when the user wants the system to fully plan, execute, review, and iterate on a change until it is done, blocked, or reaches the configured limits without writing a technical prompt."""
+    return orchestrator.run_goal_until_done(
+        objective=objective,
+        constraints=constraints,
+        validations=validations,
+        workspace=workspace,
+        max_iterations=max_iterations,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+@mcp.tool()
+def continue_goal_until_done(
+    orchestration_id: str,
+    objective: str | None = None,
+    constraints: str | None = None,
+    validations: list[str] | None = None,
+    workspace: str | None = None,
+    max_iterations: int = 3,
+    timeout_seconds: int = 900,
+) -> dict:
+    """Use this when a previous orchestration already exists and ChatGPT should resume the planner-reviewer-executor loop without rebuilding the technical context manually."""
+    return orchestrator.continue_goal_until_done(
+        orchestration_id=orchestration_id,
+        objective=objective,
+        constraints=constraints,
+        validations=validations,
+        workspace=workspace,
+        max_iterations=max_iterations,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+@mcp.tool()
+def review_orchestration_result(orchestration_id: str, focus: str | None = None) -> dict:
+    """Use this when ChatGPT needs an executive and technical summary of a completed or in-progress orchestration, including whether to continue, stop, or unblock it."""
+    return orchestrator.review_orchestration_result(
+        orchestration_id=orchestration_id,
+        focus=focus,
+    )
 
 
 async def healthcheck(_: object) -> JSONResponse:

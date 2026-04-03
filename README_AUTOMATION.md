@@ -10,6 +10,7 @@ La superficie MCP ya no esta pensada solo como primitivas operativas. La capa re
 - ChatGPT decide la estrategia y llama una tool high-level
 - la app MCP construye internamente el prompt tecnico con `AGENTS.md` y `docs/*`
 - Codex ejecuta, valida y devuelve un resultado estructurado
+- el planner/reviewer decide si la tarea ya esta hecha, si necesita otra iteracion o si quedo bloqueada
 
 Las tools low-level siguen existiendo por compatibilidad y depuracion, pero el flujo recomendado ya no depende de polling manual ni de prompts tecnicos extensos redactados por el usuario.
 
@@ -17,14 +18,25 @@ Las tools low-level siguen existiendo por compatibilidad y depuracion, pero el f
 
 ### High-level
 
+- `run_goal_until_done`
+  - usar cuando el usuario quiera que el sistema planifique, ejecute, revise y siga iterando hasta completar o bloquear un cambio
+  - corre el loop planner/reviewer <-> Codex executor sin pedir un prompt tecnico largo
+  - devuelve `final_status`, `iterations`, `planner_summary`, `codex_summary`, `reviewer_summary`, `files_changed`, `validations_run`, `risks`, `next_step` y `session_ids`
+- `continue_goal_until_done`
+  - usar cuando ya existe una orquestacion previa y ChatGPT debe retomarla sin reconstruir el contexto manualmente
+- `review_orchestration_result`
+  - usar cuando ChatGPT quiera una vision ejecutiva y tecnica de una orquestacion ya corrida
+
 - `run_eval_task_and_wait`
-  - usar cuando el usuario quiera implementar, corregir, validar o evolucionar el proyecto desde una intencion natural
+  - usar cuando una sola ejecucion de Codex suele ser suficiente y no hace falta un loop iterativo completo
   - inicia la tarea, espera internamente y devuelve un resultado estructurado final
 - `continue_eval_task_and_wait`
   - usar cuando ya existe una sesion previa y ChatGPT necesita continuarla desde un nuevo objetivo natural
   - evita que el usuario tenga que redactar un prompt tecnico de seguimiento
 - `review_eval_result`
-  - usar cuando ChatGPT quiera resumir, auditar o decidir si conviene seguir o cerrar una sesion
+  - usar cuando ChatGPT quiera resumir, auditar o decidir si conviene seguir o cerrar una sesion individual
+
+La UX recomendada pasa primero por `run_goal_until_done`.
 
 ### Low-level
 
@@ -37,10 +49,41 @@ Estas tres quedan como herramientas de bajo nivel para depuracion, recuperacion 
 ## Flujo recomendado desde ChatGPT
 
 1. El usuario escribe un objetivo corto en lenguaje natural.
-2. ChatGPT llama `run_eval_task_and_wait`.
+2. ChatGPT llama `run_goal_until_done`.
 3. La app MCP arma el prompt tecnico usando `AGENTS.md`, `docs/PROJECT_CONTEXT.md`, `docs/DECISIONS.md` y `docs/TASKS.md`.
-4. Codex ejecuta el trabajo tecnico y devuelve una salida estructurada.
-5. ChatGPT resume el resultado al usuario y, si hace falta, llama `continue_eval_task_and_wait` o `review_eval_result`.
+4. Un planner/reviewer propone la siguiente instruccion tecnica.
+5. Codex ejecuta el trabajo tecnico y devuelve una salida estructurada.
+6. El reviewer decide `done`, `needs_revision` o `blocked`.
+7. Si corresponde, la app itera automaticamente hasta completion, bloqueo, `max_iterations` o `timeout`.
+8. ChatGPT resume el resultado final al usuario y, si hace falta, llama `continue_goal_until_done` o `review_orchestration_result`.
+
+## Arquitectura de orquestacion GPT <-> Codex
+
+- Planner/Reviewer agent
+  - toma `objective`, `constraints` y `validations`
+  - construye el prompt tecnico para Codex
+  - revisa la salida de cada iteracion
+  - decide `done`, `needs_revision` o `blocked`
+- Codex executor adapter
+  - ejecuta Codex CLI sobre el workspace del proyecto
+  - soporta inicio y continuacion de sesion
+  - devuelve resultados estructurados y conserva `session_id`
+- Orchestrator loop
+  - coordina planner -> executor -> reviewer
+  - itera automaticamente hasta cumplir el objetivo o llegar a limites
+  - registra trazabilidad basica por iteracion
+
+## Criterios de cierre
+
+- `done`: el reviewer considera que el objetivo quedo cumplido con cambios y validaciones suficientes
+- `needs_revision`: el reviewer detecta que falta una iteracion adicional y genera el siguiente objetivo tecnico
+- `blocked`: hay un error, una limitacion o un riesgo que impide seguir con seguridad
+
+## Limites operativos
+
+- `run_goal_until_done` usa por defecto `max_iterations=4` y `timeout_seconds=900`
+- `continue_goal_until_done` usa por defecto `max_iterations=3` y `timeout_seconds=900`
+- si se alcanza el limite de iteraciones o el timeout, la orquestacion termina con estado controlado y recomendacion de siguiente paso
 
 Ejemplos de intencion del usuario:
 
@@ -179,6 +222,12 @@ Ejemplo recomendado para ejecutar trabajo tecnico:
 - usuario: `Corrige la integracion MCP para que ChatGPT pueda usarla y valida el proyecto.`
 - ChatGPT: llama `run_eval_task_and_wait(objective=..., constraints=..., validations=...)`
 - Codex: ejecuta y devuelve `session_id`, `status`, `summary`, `files_changed`, `validations_run`, `risks` y `next_step`
+
+Ejemplo recomendado para una orquestacion completa:
+
+- usuario: `Implementa el ajuste en automation para que GPT planifique, Codex ejecute y el sistema siga iterando hasta terminar.`
+- ChatGPT: llama `run_goal_until_done(objective=..., constraints=..., validations=..., max_iterations=4, timeout_seconds=900)`
+- la app MCP: planifica, ejecuta, revisa, reitera si hace falta y devuelve un solo resultado final estructurado
 
 Ejemplo recomendado para continuar una sesion:
 
