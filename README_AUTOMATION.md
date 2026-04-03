@@ -2,6 +2,52 @@
 
 Base minima para exponer este repo como servidor MCP y permitir que ChatGPT dispare tareas hacia Codex CLI sin copiar y pegar prompts manualmente.
 
+## Filosofia actual
+
+La superficie MCP ya no esta pensada solo como primitivas operativas. La capa recomendada es de ALTO NIVEL:
+
+- el usuario expresa el objetivo en lenguaje natural
+- ChatGPT decide la estrategia y llama una tool high-level
+- la app MCP construye internamente el prompt tecnico con `AGENTS.md` y `docs/*`
+- Codex ejecuta, valida y devuelve un resultado estructurado
+
+Las tools low-level siguen existiendo por compatibilidad y depuracion, pero el flujo recomendado ya no depende de polling manual ni de prompts tecnicos extensos redactados por el usuario.
+
+## Tools recomendadas
+
+### High-level
+
+- `run_eval_task_and_wait`
+  - usar cuando el usuario quiera implementar, corregir, validar o evolucionar el proyecto desde una intencion natural
+  - inicia la tarea, espera internamente y devuelve un resultado estructurado final
+- `continue_eval_task_and_wait`
+  - usar cuando ya existe una sesion previa y ChatGPT necesita continuarla desde un nuevo objetivo natural
+  - evita que el usuario tenga que redactar un prompt tecnico de seguimiento
+- `review_eval_result`
+  - usar cuando ChatGPT quiera resumir, auditar o decidir si conviene seguir o cerrar una sesion
+
+### Low-level
+
+- `start_eval_task`
+- `continue_eval_task`
+- `get_eval_task_status`
+
+Estas tres quedan como herramientas de bajo nivel para depuracion, recuperacion manual o casos avanzados de orquestacion.
+
+## Flujo recomendado desde ChatGPT
+
+1. El usuario escribe un objetivo corto en lenguaje natural.
+2. ChatGPT llama `run_eval_task_and_wait`.
+3. La app MCP arma el prompt tecnico usando `AGENTS.md`, `docs/PROJECT_CONTEXT.md`, `docs/DECISIONS.md` y `docs/TASKS.md`.
+4. Codex ejecuta el trabajo tecnico y devuelve una salida estructurada.
+5. ChatGPT resume el resultado al usuario y, si hace falta, llama `continue_eval_task_and_wait` o `review_eval_result`.
+
+Ejemplos de intencion del usuario:
+
+- `Corrige la integracion MCP para que el host publico no falle y valida todo.`
+- `Implementa el siguiente ajuste en finance con cambios minimos y ejecuta validaciones.`
+- `Revisa la sesion previa y dime si conviene seguir o cerrar.`
+
 ## Levantar el servidor MCP
 
 ```powershell
@@ -114,14 +160,32 @@ curl.exe -I https://<subdominio>.trycloudflare.com/mcp
 curl.exe -I https://<subdominio>.trycloudflare.com/mcp/
 ```
 
-URL publica vigente en esta validacion:
+URL publica a registrar en cada corrida:
 
 ```text
-https://plays-mortgages-pack-dressed.trycloudflare.com/mcp/
+https://<subdominio>.trycloudflare.com/mcp/
 ```
 
-Esa URL es temporal. Si `cloudflared` se reinicia, el subdominio `trycloudflare.com` cambia y hay que volver a registrar la nueva URL publica en ChatGPT.
+Esa URL es temporal. Si `cloudflared` se reinicia, el subdominio `trycloudflare.com` cambia y hay que volver a registrar la nueva URL publica en ChatGPT. Antes de pegarla en ChatGPT, conviene verificar al menos `https://<subdominio>.trycloudflare.com/health`.
 
 Unico paso manual final en ChatGPT web para esta corrida:
 
-1. Crear o editar el conector MCP y pegar `https://plays-mortgages-pack-dressed.trycloudflare.com/mcp/`.
+1. Crear o editar el conector MCP y pegar la URL HTTPS publica vigente terminada en `/mcp/`.
+
+## Ejemplos reales de uso desde ChatGPT
+
+Ejemplo recomendado para ejecutar trabajo tecnico:
+
+- usuario: `Corrige la integracion MCP para que ChatGPT pueda usarla y valida el proyecto.`
+- ChatGPT: llama `run_eval_task_and_wait(objective=..., constraints=..., validations=...)`
+- Codex: ejecuta y devuelve `session_id`, `status`, `summary`, `files_changed`, `validations_run`, `risks` y `next_step`
+
+Ejemplo recomendado para continuar una sesion:
+
+- usuario: `Sigue con la sesion anterior, pero ahora sin tocar Django fuera de automation/.`
+- ChatGPT: llama `continue_eval_task_and_wait(session_id=..., objective=...)`
+
+Ejemplo recomendado para revisar o auditar:
+
+- usuario: `Resume esa sesion y dime si conviene cerrar o seguir.`
+- ChatGPT: llama `review_eval_result(session_id=..., focus=...)`

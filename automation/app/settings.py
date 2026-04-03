@@ -83,6 +83,36 @@ def _resolve_codex_command(configured_command: str) -> str:
     return configured_command
 
 
+def _normalize_start_template(template: str) -> str:
+    legacy_values = {
+        "{codex_command} exec {prompt}",
+        "{codex_command} exec -o {output_path} {prompt}",
+    }
+    if template in legacy_values:
+        return "{codex_command} exec -o {output_path} -"
+    return template
+
+
+def _normalize_continue_template(template: str) -> str:
+    legacy_values = {
+        "{codex_command} resume {codex_session_id} {prompt}",
+        "{codex_command} exec resume -o {output_path} {codex_session_id} {prompt}",
+    }
+    if template in legacy_values:
+        return "{codex_command} exec resume -o {output_path} {codex_session_id} -"
+    return template
+
+
+def _normalize_continue_fallback_template(template: str) -> str:
+    legacy_values = {
+        "{codex_command} resume --last {prompt}",
+        "{codex_command} exec resume -o {output_path} --last {prompt}",
+    }
+    if template in legacy_values:
+        return "{codex_command} exec resume -o {output_path} --last -"
+    return template
+
+
 @dataclass(frozen=True)
 class AppSettings:
     host: str
@@ -138,16 +168,22 @@ def get_settings() -> AppSettings:
         state_dir=state_dir,
         log_dir=log_dir,
         codex_command=_resolve_codex_command(_env_value("CODEX_COMMAND", "codex")),
-        codex_start_template=os.getenv(
-            "CODEX_START_TEMPLATE",
-            "{codex_command} exec {prompt}",
+        codex_start_template=_normalize_start_template(
+            _env_value(
+                "CODEX_START_TEMPLATE",
+                "{codex_command} exec -o {output_path} -",
+            )
         ),
-        codex_continue_template=os.getenv(
-            "CODEX_CONTINUE_TEMPLATE",
-            "{codex_command} resume {codex_session_id} {prompt}",
+        codex_continue_template=_normalize_continue_template(
+            _env_value(
+                "CODEX_CONTINUE_TEMPLATE",
+                "{codex_command} exec resume -o {output_path} {codex_session_id} -",
+            )
         ),
-        codex_continue_fallback_template=os.getenv(
-            "CODEX_CONTINUE_FALLBACK_TEMPLATE",
-            "{codex_command} resume --last {prompt}",
+        codex_continue_fallback_template=_normalize_continue_fallback_template(
+            _env_value(
+                "CODEX_CONTINUE_FALLBACK_TEMPLATE",
+                "{codex_command} exec resume -o {output_path} --last -",
+            )
         ),
     )

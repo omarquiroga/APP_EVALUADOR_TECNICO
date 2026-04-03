@@ -42,6 +42,7 @@ class SessionStore:
             "exit_code": None,
             "error": None,
             "log_path": str(self.log_dir / f"{session_id}.log"),
+            "output_path": str(self.log_dir / f"{session_id}.final.txt"),
         }
 
         with self._lock:

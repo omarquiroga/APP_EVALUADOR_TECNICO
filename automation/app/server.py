@@ -12,10 +12,12 @@ from starlette.routing import Mount, Route
 
 try:
     from app.codex_runner import CodexRunner
+    from app.high_level import HighLevelOrchestrator
     from app.settings import get_settings
     from app.state import SessionStore
 except ModuleNotFoundError:
     from automation.app.codex_runner import CodexRunner
+    from automation.app.high_level import HighLevelOrchestrator
     from automation.app.settings import get_settings
     from automation.app.state import SessionStore
 
@@ -23,6 +25,7 @@ except ModuleNotFoundError:
 settings = get_settings()
 store = SessionStore(settings.state_dir, settings.log_dir)
 runner = CodexRunner(settings, store)
+orchestrator = HighLevelOrchestrator(settings, store, runner)
 
 transport_security = TransportSecuritySettings(
     # Quick tunnels like trycloudflare rotate hostname on each restart, so
@@ -42,6 +45,11 @@ transport_security = TransportSecuritySettings(
 
 mcp = FastMCP(
     "evaluador-tecnico-automation",
+    instructions=(
+        "Prefer the high-level tools when the user wants to implement, fix, validate, or evolve the "
+        "project from a business objective. Keep the low-level tools for debugging, manual orchestration, "
+        "or advanced recovery workflows."
+    ),
     stateless_http=True,
     json_response=True,
     streamable_http_path="/",
@@ -51,20 +59,72 @@ mcp = FastMCP(
 
 @mcp.tool()
 def start_eval_task(prompt: str, workspace: str | None = None) -> dict:
-    """Inicia una tarea de Codex sobre este proyecto o un workspace permitido."""
+    """Use this when you need a low-level or debug primitive to start a Codex task with a fully prepared technical prompt."""
     return runner.start_task(prompt=prompt, workspace=workspace)
 
 
 @mcp.tool()
 def continue_eval_task(session_id: str, prompt: str, workspace: str | None = None) -> dict:
-    """Continua una sesion previa de Codex usando el mismo id local."""
+    """Use this when you need a low-level or debug primitive to continue a specific local session with a manually written technical prompt."""
     return runner.continue_task(session_id=session_id, prompt=prompt, workspace=workspace)
 
 
 @mcp.tool()
 def get_eval_task_status(session_id: str) -> dict:
-    """Consulta estado, log reciente y metadatos de una sesion."""
+    """Use this when you need low-level or debug visibility into the raw status, log tail, and metadata of a local session."""
     return runner.get_status(session_id=session_id)
+
+
+@mcp.tool()
+def run_eval_task_and_wait(
+    objective: str,
+    scope: str | None = None,
+    constraints: str | None = None,
+    validations: list[str] | None = None,
+    workspace: str | None = None,
+    timeout_seconds: int | None = None,
+    poll_interval_seconds: int | None = None,
+) -> dict:
+    """Use this when the user wants to implement, fix, validate, or evolve the project from a natural-language objective and should not need to write a long technical prompt."""
+    return orchestrator.run_and_wait(
+        objective=objective,
+        scope=scope,
+        constraints=constraints,
+        validations=validations,
+        workspace=workspace,
+        timeout_seconds=timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
+
+
+@mcp.tool()
+def continue_eval_task_and_wait(
+    session_id: str,
+    objective: str,
+    scope: str | None = None,
+    constraints: str | None = None,
+    validations: list[str] | None = None,
+    workspace: str | None = None,
+    timeout_seconds: int | None = None,
+    poll_interval_seconds: int | None = None,
+) -> dict:
+    """Use this when a previous high-level task already exists and ChatGPT should continue it from a new natural-language objective without manual polling or prompt choreography."""
+    return orchestrator.continue_and_wait(
+        session_id=session_id,
+        objective=objective,
+        scope=scope,
+        constraints=constraints,
+        validations=validations,
+        workspace=workspace,
+        timeout_seconds=timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
+
+
+@mcp.tool()
+def review_eval_result(session_id: str, focus: str | None = None) -> dict:
+    """Use this when ChatGPT needs a high-level synthesis or audit of a previous session, including status, summary, validations, risks, and whether to continue or close."""
+    return orchestrator.review_result(session_id=session_id, focus=focus)
 
 
 async def healthcheck(_: object) -> JSONResponse:

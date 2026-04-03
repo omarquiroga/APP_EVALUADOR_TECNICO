@@ -129,6 +129,7 @@ class CodexRunner:
             prompt=prompt,
             codex_session_id=session.get("codex_session_id"),
             continue_existing=continue_existing,
+            output_path=session.get("output_path", ""),
         )
         log_path = Path(session["log_path"])
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -167,13 +168,16 @@ class CodexRunner:
                 process = subprocess.Popen(
                     command,
                     cwd=str(workspace),
+                    stdin=subprocess.PIPE,
                     stdout=handle,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    encoding="utf-8",
                     shell=True,
                 )
                 self.store.update_session(session_id, pid=process.pid)
-                exit_code = process.wait()
+                _, _ = process.communicate(prompt)
+                exit_code = process.returncode
 
             codex_session_id = self._discover_codex_session_id(workspace, before_files)
             final_status = "completed" if exit_code == 0 else "failed"
@@ -199,6 +203,7 @@ class CodexRunner:
         prompt: str,
         codex_session_id: str | None,
         continue_existing: bool,
+        output_path: str,
     ) -> str:
         template = self.settings.codex_start_template
         if continue_existing:
@@ -213,6 +218,7 @@ class CodexRunner:
             "prompt": _quote(prompt),
             "codex_session_id": _quote(codex_session_id or ""),
             "session_id": _quote(codex_session_id or ""),
+            "output_path": _quote(output_path),
         }
         return template.format(**values)
 
