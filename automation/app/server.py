@@ -181,14 +181,20 @@ def review_orchestration_result(orchestration_id: str, focus: str | None = None)
 
 async def healthcheck(_: object) -> JSONResponse:
     codex_probe = runner.probe_command()
+    exec_probe = runner.execution_diagnostics()
     return JSONResponse(
         {
             "status": "ok",
             "mcp_path": settings.mcp_path,
             "default_workspace": str(settings.default_workspace),
+            "allowed_workspaces": exec_probe["allowed_workspaces"],
             "codex_command": codex_probe["command"],
             "codex_command_ok": codex_probe["ok"],
             "codex_command_detail": codex_probe["detail"],
+            "effective_sandbox_mode": exec_probe["effective_sandbox_mode"],
+            "effective_approval_policy": exec_probe["effective_approval_policy"],
+            "write_within_workspace_ok": exec_probe["write_within_workspace_ok"],
+            "write_within_workspace_detail": exec_probe["write_within_workspace_detail"],
         }
     )
 

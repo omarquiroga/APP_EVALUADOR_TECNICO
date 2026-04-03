@@ -1,0 +1,5 @@
+model = "gpt-5.4"
+
+[profiles.mcp_workspace_write]
+approval_policy = "never"
+sandbox_mode = "workspace-write"

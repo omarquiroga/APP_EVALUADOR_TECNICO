@@ -87,9 +87,13 @@ def _normalize_start_template(template: str) -> str:
     legacy_values = {
         "{codex_command} exec {prompt}",
         "{codex_command} exec -o {output_path} {prompt}",
+        "{codex_command} exec -o {output_path} -",
     }
     if template in legacy_values:
-        return "{codex_command} exec -o {output_path} -"
+        return (
+            "{codex_command} exec -C {workspace_path} "
+            "-s {sandbox_mode} -c approval_policy={approval_policy} -o {output_path} -"
+        )
     return template
 
 
@@ -97,9 +101,13 @@ def _normalize_continue_template(template: str) -> str:
     legacy_values = {
         "{codex_command} resume {codex_session_id} {prompt}",
         "{codex_command} exec resume -o {output_path} {codex_session_id} {prompt}",
+        "{codex_command} exec resume -o {output_path} {codex_session_id} -",
     }
     if template in legacy_values:
-        return "{codex_command} exec resume -o {output_path} {codex_session_id} -"
+        return (
+            "{codex_command} exec resume -C {workspace_path} "
+            "-s {sandbox_mode} -c approval_policy={approval_policy} -o {output_path} {codex_session_id} -"
+        )
     return template
 
 
@@ -107,10 +115,28 @@ def _normalize_continue_fallback_template(template: str) -> str:
     legacy_values = {
         "{codex_command} resume --last {prompt}",
         "{codex_command} exec resume -o {output_path} --last {prompt}",
+        "{codex_command} exec resume -o {output_path} --last -",
     }
     if template in legacy_values:
-        return "{codex_command} exec resume -o {output_path} --last -"
+        return (
+            "{codex_command} exec resume -C {workspace_path} "
+            "-s {sandbox_mode} -c approval_policy={approval_policy} -o {output_path} --last -"
+        )
     return template
+
+
+def _normalize_sandbox_mode(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in {"read-only", "workspace-write", "danger-full-access"}:
+        return normalized
+    return "workspace-write"
+
+
+def _normalize_approval_policy(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in {"untrusted", "on-failure", "on-request", "never"}:
+        return normalized
+    return "never"
 
 
 @dataclass(frozen=True)
@@ -125,6 +151,8 @@ class AppSettings:
     state_dir: Path
     log_dir: Path
     codex_command: str
+    codex_sandbox_mode: str
+    codex_approval_policy: str
     codex_start_template: str
     codex_continue_template: str
     codex_continue_fallback_template: str
@@ -168,22 +196,37 @@ def get_settings() -> AppSettings:
         state_dir=state_dir,
         log_dir=log_dir,
         codex_command=_resolve_codex_command(_env_value("CODEX_COMMAND", "codex")),
+        codex_sandbox_mode=_normalize_sandbox_mode(
+            _env_value("CODEX_SANDBOX_MODE", "workspace-write")
+        ),
+        codex_approval_policy=_normalize_approval_policy(
+            _env_value("CODEX_APPROVAL_POLICY", "never")
+        ),
         codex_start_template=_normalize_start_template(
             _env_value(
                 "CODEX_START_TEMPLATE",
-                "{codex_command} exec -o {output_path} -",
+                (
+                    "{codex_command} exec -C {workspace_path} "
+                    "-s {sandbox_mode} -c approval_policy={approval_policy} -o {output_path} -"
+                ),
             )
         ),
         codex_continue_template=_normalize_continue_template(
             _env_value(
                 "CODEX_CONTINUE_TEMPLATE",
-                "{codex_command} exec resume -o {output_path} {codex_session_id} -",
+                (
+                    "{codex_command} exec resume -C {workspace_path} "
+                    "-s {sandbox_mode} -c approval_policy={approval_policy} -o {output_path} {codex_session_id} -"
+                ),
             )
         ),
         codex_continue_fallback_template=_normalize_continue_fallback_template(
             _env_value(
                 "CODEX_CONTINUE_FALLBACK_TEMPLATE",
-                "{codex_command} exec resume -o {output_path} --last -",
+                (
+                    "{codex_command} exec resume -C {workspace_path} "
+                    "-s {sandbox_mode} -c approval_policy={approval_policy} -o {output_path} --last -"
+                ),
             )
         ),
     )

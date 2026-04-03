@@ -429,7 +429,8 @@ Devuelve JSON valido con esta forma exacta:
         if session_ids:
             latest_session_id = session_ids[-1]
             latest_status = self.runner.get_status(latest_session_id)
-            if latest_status["status"] not in {"pending", "running"}:
+            latest_workspace = self.runner.inspect_session_workspace(latest_session_id, workspace)
+            if latest_status["status"] not in {"pending", "running"} and latest_workspace["ok"]:
                 self.store.update_session(
                     latest_session_id,
                     high_level_request={
@@ -483,7 +484,9 @@ Devuelve JSON valido con esta forma exacta:
 
         command = (
             f'{subprocess.list2cmdline([self.settings.codex_command])} '
-            f'exec -o {subprocess.list2cmdline([str(output_path)])} -'
+            f'exec -C {subprocess.list2cmdline([str(workspace.resolve())])} '
+            f'-s {self.settings.codex_sandbox_mode} -c approval_policy={self.settings.codex_approval_policy} '
+            f'-o {subprocess.list2cmdline([str(output_path)])} -'
         )
         completed = subprocess.run(
             command,
@@ -689,6 +692,9 @@ Instrucciones de orquestacion:
 - Si el objetivo ya es claro, ejecuta directamente.
 - Si haces cambios funcionales, corre las validaciones pertinentes y reporta cuales ejecutaste.
 - Manten compatibilidad con la arquitectura actual.
+- Usa como workspace real la raiz del repo `{self.settings.project_root}`.
+- Formula y aplica cambios con rutas relativas a esa raiz, por ejemplo `review/views.py`.
+- No intentes escribir con rutas absolutas ni fuera del workspace del repo.
 - Devuelve tu MENSAJE FINAL como un JSON valido, sin fences ni texto adicional, con esta forma exacta:
 {{
   "plan_corto": ["paso 1", "paso 2"],

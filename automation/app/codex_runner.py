@@ -46,6 +46,9 @@ class CodexRunner:
             raise ValueError(f"La sesion {session_id} sigue en ejecucion.")
 
         resolved_workspace = self.settings.resolve_workspace(workspace or session["workspace"])
+        consistency = self.inspect_session_workspace(session_id, resolved_workspace)
+        if not consistency["ok"]:
+            raise ValueError(consistency["detail"])
         self.store.update_session(
             session_id,
             last_prompt=prompt,
@@ -97,6 +100,76 @@ class CodexRunner:
             "detail": detail,
         }
 
+    def probe_write_within_workspace(self, workspace: str | None = None) -> dict[str, Any]:
+        resolved_workspace = self.settings.resolve_workspace(workspace)
+        probe_path = resolved_workspace / "automation" / ".state" / ".write_probe.tmp"
+        try:
+            probe_path.parent.mkdir(parents=True, exist_ok=True)
+            probe_path.write_text("write probe ok", encoding="utf-8")
+            probe_path.unlink(missing_ok=True)
+        except Exception as exc:
+            return {
+                "ok": False,
+                "workspace": str(resolved_workspace),
+                "detail": str(exc),
+            }
+
+        return {
+            "ok": True,
+            "workspace": str(resolved_workspace),
+            "detail": "create-delete probe completed inside workspace",
+        }
+
+    def inspect_session_workspace(self, session_id: str, workspace: Path | str | None = None) -> dict[str, Any]:
+        session = self.store.get_session(session_id)
+        resolved_workspace = self.settings.resolve_workspace(workspace or session["workspace"])
+        stored_workspace = Path(session["workspace"]).resolve()
+        if stored_workspace != resolved_workspace:
+            return {
+                "ok": False,
+                "detail": (
+                    f"La sesion {session_id} fue creada para {stored_workspace} y no para "
+                    f"{resolved_workspace}. Debe abrirse una sesion nueva."
+                ),
+            }
+
+        codex_session_id = session.get("codex_session_id")
+        if not codex_session_id:
+            return {"ok": True, "detail": "No codex_session_id persisted yet; workspace matches session record."}
+
+        metadata = self._read_session_meta_by_id(codex_session_id)
+        if not metadata:
+            return {
+                "ok": True,
+                "detail": "No session metadata file was found for the persisted codex_session_id.",
+            }
+
+        metadata_cwd = Path(metadata.get("cwd", "")).resolve()
+        if metadata_cwd != resolved_workspace:
+            return {
+                "ok": False,
+                "detail": (
+                    f"La sesion de Codex {codex_session_id} esta anclada a {metadata_cwd} y no a "
+                    f"{resolved_workspace}. Debe abrirse una sesion nueva."
+                ),
+            }
+
+        return {
+            "ok": True,
+            "detail": f"Codex session {codex_session_id} is anchored to {resolved_workspace}.",
+        }
+
+    def execution_diagnostics(self) -> dict[str, Any]:
+        write_probe = self.probe_write_within_workspace()
+        return {
+            "default_workspace": str(self.settings.default_workspace),
+            "allowed_workspaces": [str(path) for path in self.settings.allowed_workspaces],
+            "effective_sandbox_mode": self.settings.codex_sandbox_mode,
+            "effective_approval_policy": self.settings.codex_approval_policy,
+            "write_within_workspace_ok": write_probe["ok"],
+            "write_within_workspace_detail": write_probe["detail"],
+        }
+
     def _launch(
         self,
         session_id: str,
@@ -130,6 +203,7 @@ class CodexRunner:
             codex_session_id=session.get("codex_session_id"),
             continue_existing=continue_existing,
             output_path=session.get("output_path", ""),
+            workspace=workspace,
         )
         log_path = Path(session["log_path"])
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -204,6 +278,7 @@ class CodexRunner:
         codex_session_id: str | None,
         continue_existing: bool,
         output_path: str,
+        workspace: Path,
     ) -> str:
         template = self.settings.codex_start_template
         if continue_existing:
@@ -219,6 +294,9 @@ class CodexRunner:
             "codex_session_id": _quote(codex_session_id or ""),
             "session_id": _quote(codex_session_id or ""),
             "output_path": _quote(output_path),
+            "workspace_path": _quote(str(workspace.resolve())),
+            "sandbox_mode": self.settings.codex_sandbox_mode,
+            "approval_policy": self.settings.codex_approval_policy,
         }
         return template.format(**values)
 
@@ -227,6 +305,17 @@ class CodexRunner:
         if not base.exists():
             return set()
         return set(base.rglob("*.jsonl"))
+
+    def _read_session_meta_by_id(self, codex_session_id: str) -> dict[str, Any] | None:
+        base = Path.home() / ".codex" / "sessions"
+        if not base.exists():
+            return None
+
+        for path in sorted(base.rglob("*.jsonl"), key=lambda item: item.stat().st_mtime, reverse=True):
+            metadata = self._read_session_meta(path)
+            if metadata and metadata.get("id") == codex_session_id:
+                return metadata
+        return None
 
     def _discover_codex_session_id(
         self,

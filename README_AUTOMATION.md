@@ -107,6 +107,41 @@ Por defecto el servidor escucha en:
 
 Ese endpoint local sirve para pruebas del operador, no para registrar directamente en ChatGPT.
 
+## Workspace real del executor
+
+El servidor arranca desde `automation/`, pero el workspace real que se pasa a Codex para escribir cambios es siempre la raiz del repo:
+
+```text
+C:\PROYECTOS\Evaluador Tecnico LFVU
+```
+
+Eso evita que archivos como `review/forms.py`, `review/views.py` o `review/tests.py` queden fuera del proyecto por usar `automation/` como raiz equivocada. Las instrucciones al executor deben formular rutas relativas a la raiz del repo, por ejemplo `review/views.py`, no rutas absolutas ni rutas relativas a `automation/`.
+
+## Sandbox y aprobaciones efectivas
+
+La capa MCP fuerza el modo operativo de `codex exec` con estas opciones:
+
+- workspace: `C:\PROYECTOS\Evaluador Tecnico LFVU`
+- sandbox efectivo: `workspace-write`
+- aprobaciones efectivas: `never`
+
+Las plantillas normalizadas usan `-C <workspace>`, `-s workspace-write` y `-c approval_policy=never` para evitar que `codex exec` caiga en el default `read-only` del host.
+
+Existe un `.codex/config.toml` repo-local como referencia segura para operadores humanos, pero la configuracion efectiva del servidor MCP no depende de ese archivo; el runner pasa los flags explicitamente en cada ejecucion.
+
+## Diagnosticar "writing outside of the project"
+
+Si vuelve a aparecer ese error, revisar en este orden:
+
+1. `GET /health`
+2. `default_workspace`
+3. `effective_sandbox_mode`
+4. `effective_approval_policy`
+5. `write_within_workspace_ok`
+6. `command` y `workspace` de la sesion en `get_eval_task_status`
+
+El caso problematico observado en este proyecto no venia de un `cwd` en `automation/`, sino de sesiones `codex exec` arrancadas con sandbox `read-only`. En ese estado, Codex reportaba `patch rejected: writing outside of the project; rejected by user approval settings` aunque el `cwd` ya apuntara a `C:\PROYECTOS\Evaluador Tecnico LFVU`.
+
 ## Abrir ngrok
 
 ChatGPT necesita una URL publica HTTPS. Una forma simple es exponer el puerto local con ngrok:
@@ -210,6 +245,8 @@ https://<subdominio>.trycloudflare.com/mcp/
 ```
 
 Esa URL es temporal. Si `cloudflared` se reinicia, el subdominio `trycloudflare.com` cambia y hay que volver a registrar la nueva URL publica en ChatGPT. Antes de pegarla en ChatGPT, conviene verificar al menos `https://<subdominio>.trycloudflare.com/health`.
+
+No reutilices una URL vieja de `trycloudflare.com`: cada Quick Tunnel nuevo puede emitir un subdominio distinto y ChatGPT debe apuntar siempre a la URL HTTPS vigente de esa corrida.
 
 Unico paso manual final en ChatGPT web para esta corrida:
 
