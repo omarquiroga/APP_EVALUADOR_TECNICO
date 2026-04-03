@@ -30,6 +30,20 @@ CONTEXT_FILES = [
     "docs/TASKS.md",
 ]
 
+TERMINAL_ORCHESTRATION_STATUSES = {
+    "completed",
+    "blocked",
+    "failed",
+    "timeout",
+    "max_iterations_reached",
+}
+
+TERMINAL_EXECUTOR_STATUSES = {
+    "completed",
+    "failed",
+    "timeout",
+}
+
 
 def _json_block(payload: Any) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
@@ -403,74 +417,198 @@ Devuelve JSON valido con esta forma exacta:
         session_ids = list(orchestration.get("session_ids", []))
         current_objective = objective
         final_status = "max_iterations_reached"
+        try:
+            for iteration_number in range(len(existing_iterations) + 1, len(existing_iterations) + max_iterations + 1):
+                remaining = int(timeout_seconds - (time.time() - start))
+                if remaining <= 0:
+                    final_status = "timeout"
+                    break
 
-        for iteration_number in range(len(existing_iterations) + 1, len(existing_iterations) + max_iterations + 1):
-            remaining = int(timeout_seconds - (time.time() - start))
-            if remaining <= 0:
-                final_status = "timeout"
-                break
+                planner = self._planner_step(
+                    orchestration=orchestration,
+                    current_objective=current_objective,
+                    constraints=constraints,
+                    validations=validations,
+                    iteration_number=iteration_number,
+                    workspace=workspace,
+                    timeout_seconds=min(remaining, 180),
+                    allowed_paths=allowed_paths,
+                    max_files_changed=max_files_changed,
+                    no_destructive_changes=no_destructive_changes,
+                )
 
-            planner = self._planner_step(
-                orchestration=orchestration,
-                current_objective=current_objective,
-                constraints=constraints,
-                validations=validations,
-                iteration_number=iteration_number,
-                workspace=workspace,
-                timeout_seconds=min(remaining, 180),
-                allowed_paths=allowed_paths,
-                max_files_changed=max_files_changed,
-                no_destructive_changes=no_destructive_changes,
-            )
+                executor_result = self._executor_step(
+                    planner=planner,
+                    current_objective=current_objective,
+                    constraints=constraints,
+                    validations=validations,
+                    workspace=workspace,
+                    session_ids=session_ids,
+                    timeout_seconds=min(remaining, max(60, remaining - 30)),
+                    allowed_paths=allowed_paths,
+                    max_files_changed=max_files_changed,
+                    no_destructive_changes=no_destructive_changes,
+                )
+                if executor_result["session_id"] not in session_ids:
+                    session_ids.append(executor_result["session_id"])
 
-            executor_result = self._executor_step(
-                planner=planner,
-                current_objective=current_objective,
-                constraints=constraints,
-                validations=validations,
-                workspace=workspace,
-                session_ids=session_ids,
-                timeout_seconds=min(remaining, max(60, remaining - 30)),
-                allowed_paths=allowed_paths,
-                max_files_changed=max_files_changed,
-                no_destructive_changes=no_destructive_changes,
-            )
-            if executor_result["session_id"] not in session_ids:
-                session_ids.append(executor_result["session_id"])
+                executor_status = self._normalize_executor_status(executor_result.get("status", "failed"))
+                executor_result["status"] = executor_status
 
-            guardrail = self._evaluate_guardrails(
-                executor_result=executor_result,
-                allowed_paths=allowed_paths or [],
-                max_files_changed=max_files_changed,
-                no_destructive_changes=no_destructive_changes,
-                workspace=workspace,
-            )
-            if not guardrail["ok"]:
-                reviewer = {
-                    "decision": "blocked",
-                    "reviewer_summary": guardrail["reason"],
-                    "next_objective": None,
-                    "risks": guardrail["risks"],
-                    "next_step": "Reducir el scope permitido o ajustar la tarea antes de reintentar.",
-                    "blocked_by_guardrail": True,
-                }
-                iteration_record = {
-                    "iteration": iteration_number,
-                    "planner": planner,
-                    "executor": {
-                        "session_id": executor_result["session_id"],
-                        "status": executor_result["status"],
-                        "summary": executor_result.get("summary", ""),
-                        "files_changed": executor_result.get("files_changed", []),
-                        "validations_run": executor_result.get("validations_run", []),
-                        "risks": list(executor_result.get("risks", [])) + guardrail["risks"],
-                    },
-                    "reviewer": reviewer,
-                }
+                if executor_status not in TERMINAL_EXECUTOR_STATUSES:
+                    reviewer = self._build_terminal_reviewer(
+                        final_status="failed",
+                        detail=(
+                            f"El executor devolvio un estado no terminal e invalido para la tool high-level: "
+                            f"{executor_status}."
+                        ),
+                    )
+                    iteration_record = self._build_iteration_record(
+                        iteration_number=iteration_number,
+                        planner=planner,
+                        executor_result=executor_result,
+                        reviewer=reviewer,
+                    )
+                    existing_iterations.append(iteration_record)
+                    orchestration = self.store.update_orchestration(
+                        orchestration_id,
+                        status="failed",
+                        objective=objective,
+                        constraints=constraints,
+                        validations=validations,
+                        max_iterations=max_iterations,
+                        timeout_seconds=timeout_seconds,
+                        iterations=existing_iterations,
+                        session_ids=session_ids,
+                        last_block_reason=reviewer["reviewer_summary"],
+                    )
+                    final_status = "failed"
+                    break
+
+                if executor_status in {"failed", "timeout"}:
+                    reviewer = self._build_terminal_reviewer(
+                        final_status=executor_status,
+                        detail=(
+                            executor_result.get("summary")
+                            or executor_result.get("next_step")
+                            or f"El executor termino con estado {executor_status}."
+                        ),
+                        risks=executor_result.get("risks", []),
+                    )
+                    iteration_record = self._build_iteration_record(
+                        iteration_number=iteration_number,
+                        planner=planner,
+                        executor_result=executor_result,
+                        reviewer=reviewer,
+                    )
+                    existing_iterations.append(iteration_record)
+                    orchestration = self.store.update_orchestration(
+                        orchestration_id,
+                        status=executor_status,
+                        objective=objective,
+                        constraints=constraints,
+                        validations=validations,
+                        max_iterations=max_iterations,
+                        timeout_seconds=timeout_seconds,
+                        iterations=existing_iterations,
+                        session_ids=session_ids,
+                        last_block_reason=reviewer["reviewer_summary"],
+                    )
+                    final_status = executor_status
+                    break
+
+                guardrail = self._evaluate_guardrails(
+                    executor_result=executor_result,
+                    allowed_paths=allowed_paths or [],
+                    max_files_changed=max_files_changed,
+                    no_destructive_changes=no_destructive_changes,
+                    workspace=workspace,
+                )
+                if not guardrail["ok"]:
+                    reviewer = {
+                        "decision": "blocked",
+                        "reviewer_summary": guardrail["reason"],
+                        "next_objective": None,
+                        "risks": guardrail["risks"],
+                        "next_step": "Reducir el scope permitido o ajustar la tarea antes de reintentar.",
+                        "blocked_by_guardrail": True,
+                    }
+                    iteration_record = self._build_iteration_record(
+                        iteration_number=iteration_number,
+                        planner=planner,
+                        executor_result={
+                            **executor_result,
+                            "risks": list(executor_result.get("risks", [])) + guardrail["risks"],
+                        },
+                        reviewer=reviewer,
+                    )
+                    existing_iterations.append(iteration_record)
+                    orchestration = self.store.update_orchestration(
+                        orchestration_id,
+                        status="blocked",
+                        objective=objective,
+                        constraints=constraints,
+                        validations=validations,
+                        max_iterations=max_iterations,
+                        timeout_seconds=timeout_seconds,
+                        iterations=existing_iterations,
+                        session_ids=session_ids,
+                        last_block_reason=guardrail["reason"],
+                    )
+                    final_status = "blocked"
+                    break
+
+                remaining = int(timeout_seconds - (time.time() - start))
+                if remaining <= 0:
+                    reviewer = self._build_terminal_reviewer(
+                        final_status="timeout",
+                        detail="La orquestacion alcanzo timeout antes de completar la revision final.",
+                        risks=executor_result.get("risks", []),
+                    )
+                    iteration_record = self._build_iteration_record(
+                        iteration_number=iteration_number,
+                        planner=planner,
+                        executor_result=executor_result,
+                        reviewer=reviewer,
+                    )
+                    existing_iterations.append(iteration_record)
+                    orchestration = self.store.update_orchestration(
+                        orchestration_id,
+                        status="timeout",
+                        objective=objective,
+                        constraints=constraints,
+                        validations=validations,
+                        max_iterations=max_iterations,
+                        timeout_seconds=timeout_seconds,
+                        iterations=existing_iterations,
+                        session_ids=session_ids,
+                        last_block_reason=reviewer["reviewer_summary"],
+                    )
+                    final_status = "timeout"
+                    break
+
+                reviewer = self._reviewer_step(
+                    orchestration=orchestration,
+                    planner=planner,
+                    executor_result=executor_result,
+                    iteration_number=iteration_number,
+                    workspace=workspace,
+                    timeout_seconds=min(max(remaining, 30), 180),
+                    allowed_paths=allowed_paths,
+                    max_files_changed=max_files_changed,
+                    no_destructive_changes=no_destructive_changes,
+                )
+
+                iteration_record = self._build_iteration_record(
+                    iteration_number=iteration_number,
+                    planner=planner,
+                    executor_result=executor_result,
+                    reviewer=reviewer,
+                )
                 existing_iterations.append(iteration_record)
                 orchestration = self.store.update_orchestration(
                     orchestration_id,
-                    status="blocked",
+                    status="running",
                     objective=objective,
                     constraints=constraints,
                     validations=validations,
@@ -478,41 +616,41 @@ Devuelve JSON valido con esta forma exacta:
                     timeout_seconds=timeout_seconds,
                     iterations=existing_iterations,
                     session_ids=session_ids,
-                    last_block_reason=guardrail["reason"],
                 )
-                final_status = "blocked"
-                break
 
-            remaining = int(timeout_seconds - (time.time() - start))
-            reviewer = self._reviewer_step(
-                orchestration=orchestration,
-                planner=planner,
-                executor_result=executor_result,
-                iteration_number=iteration_number,
-                workspace=workspace,
-                timeout_seconds=min(max(remaining, 30), 180),
-                allowed_paths=allowed_paths,
-                max_files_changed=max_files_changed,
-                no_destructive_changes=no_destructive_changes,
+                decision = reviewer.get("decision", "blocked")
+                if decision == "done":
+                    final_status = "completed"
+                    break
+                if decision == "blocked":
+                    final_status = "blocked"
+                    break
+
+                current_objective = reviewer.get("next_objective") or current_objective
+        except Exception as exc:
+            final_status = "failed"
+            failure_reviewer = self._build_terminal_reviewer(
+                final_status="failed",
+                detail=f"La orquestacion fallo con una excepcion interna: {exc}",
             )
-
-            iteration_record = {
-                "iteration": iteration_number,
-                "planner": planner,
-                "executor": {
-                    "session_id": executor_result["session_id"],
-                    "status": executor_result["status"],
-                    "summary": executor_result.get("summary", ""),
-                    "files_changed": executor_result.get("files_changed", []),
-                    "validations_run": executor_result.get("validations_run", []),
-                    "risks": executor_result.get("risks", []),
-                },
-                "reviewer": reviewer,
-            }
-            existing_iterations.append(iteration_record)
+            existing_iterations.append(
+                self._build_iteration_record(
+                    iteration_number=len(existing_iterations) + 1,
+                    planner={"planner_summary": "Fallo interno antes de consolidar la iteracion."},
+                    executor_result={
+                        "session_id": session_ids[-1] if session_ids else None,
+                        "status": "failed",
+                        "summary": "",
+                        "files_changed": [],
+                        "validations_run": [],
+                        "risks": [str(exc)],
+                    },
+                    reviewer=failure_reviewer,
+                )
+            )
             orchestration = self.store.update_orchestration(
                 orchestration_id,
-                status="running",
+                status="failed",
                 objective=objective,
                 constraints=constraints,
                 validations=validations,
@@ -520,26 +658,20 @@ Devuelve JSON valido con esta forma exacta:
                 timeout_seconds=timeout_seconds,
                 iterations=existing_iterations,
                 session_ids=session_ids,
+                last_block_reason=failure_reviewer["reviewer_summary"],
+                error=str(exc),
             )
-
-            decision = reviewer.get("decision", "blocked")
-            if decision == "done":
-                final_status = "completed"
-                break
-            if decision == "blocked":
-                final_status = "blocked"
-                break
-
-            current_objective = reviewer.get("next_objective") or current_objective
 
         final_result = self._summarize_orchestration(orchestration)
         final_result["final_status"] = final_status
+        final_result["iterations"] = len(existing_iterations)
         self.store.update_orchestration(
             orchestration_id,
             status=final_status,
             completed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             final_result=final_result,
             session_ids=session_ids,
+            iterations=existing_iterations,
         )
         return final_result
 
@@ -802,6 +934,10 @@ Devuelve JSON valido con esta forma exacta:
         result_status = session["status"]
         if session["status"] in {"pending", "running"}:
             result_status = "timeout"
+        elif session["status"] == "unknown":
+            result_status = "failed"
+        elif session["status"] not in {"completed", "failed"}:
+            result_status = "failed"
 
         structured = self._build_structured_result(session, result_status)
         self.store.update_session(session_id, high_level_result=structured)
@@ -868,6 +1004,56 @@ Devuelve JSON valido con esta forma exacta:
             "next_step": last_iteration.get("reviewer", {}).get("next_step", ""),
             "session_ids": orchestration.get("session_ids", []),
         }
+
+    def _build_iteration_record(
+        self,
+        *,
+        iteration_number: int,
+        planner: dict[str, Any],
+        executor_result: dict[str, Any],
+        reviewer: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            "iteration": iteration_number,
+            "planner": planner,
+            "executor": {
+                "session_id": executor_result.get("session_id"),
+                "status": executor_result.get("status"),
+                "summary": executor_result.get("summary", ""),
+                "files_changed": executor_result.get("files_changed", []),
+                "validations_run": executor_result.get("validations_run", []),
+                "risks": executor_result.get("risks", []),
+            },
+            "reviewer": reviewer,
+        }
+
+    def _build_terminal_reviewer(
+        self,
+        *,
+        final_status: str,
+        detail: str,
+        risks: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "decision": "blocked" if final_status in {"blocked", "failed", "timeout"} else "done",
+            "reviewer_summary": detail,
+            "next_objective": None,
+            "risks": risks or [],
+            "next_step": (
+                "Revisar logs internos y volver a intentar con un objetivo o scope mas acotado."
+                if final_status in {"blocked", "failed", "timeout"}
+                else "Cerrar la orquestacion actual."
+            ),
+            "terminal_status": final_status,
+        }
+
+    def _normalize_executor_status(self, raw_status: str) -> str:
+        status = (raw_status or "").strip().lower()
+        if status in TERMINAL_EXECUTOR_STATUSES:
+            return status
+        if status in {"pending", "running", "unknown", ""}:
+            return "failed"
+        return "failed"
 
     def _read_final_output(self, session: dict[str, Any]) -> str:
         output_path = Path(session.get("output_path", ""))

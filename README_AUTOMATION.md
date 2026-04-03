@@ -27,6 +27,7 @@ La experiencia original con `run_goal_until_done` resulto demasiado amplia para 
 - `execute_scoped_goal_until_done`
   - usar cuando ya existe un scope acotado y el sistema debe ejecutar cambios solo dentro de rutas permitidas
   - bloquea la tarea si intenta salir de `allowed_paths`, exceder `max_files_changed` o hacer cambios destructivos
+  - espera internamente hasta un estado terminal real; `running` no es una salida final normal de esta tool
 - `review_orchestration_result`
   - usar cuando ChatGPT quiera una vision ejecutiva y tecnica de una orquestacion ya corrida
 
@@ -56,6 +57,8 @@ La UX recomendada pasa primero por `plan_goal_readonly` y luego por `execute_sco
 
 Estas tres quedan como herramientas de bajo nivel para depuracion, recuperacion manual o casos avanzados de orquestacion.
 
+A diferencia de las tools high-level, las low-level si pueden exponer estados parciales como `pending` o `running`.
+
 ## Flujo recomendado desde ChatGPT
 
 1. El usuario escribe un objetivo corto en lenguaje natural.
@@ -66,6 +69,16 @@ Estas tres quedan como herramientas de bajo nivel para depuracion, recuperacion 
 6. La app itera planner/reviewer <-> Codex executor dentro de ese scope.
 7. Si el cambio intenta salir de `allowed_paths`, exceder `max_files_changed` o hacer algo destructivo, la orquestacion termina en `blocked`.
 8. ChatGPT resume el resultado final y, si hace falta, llama `review_orchestration_result`.
+
+Estados terminales esperados de la tool high-level:
+
+- `completed`
+- `blocked`
+- `failed`
+- `timeout`
+- `max_iterations_reached`
+
+`running` queda como estado interno de progreso o traza, no como respuesta final normal de `execute_scoped_goal_until_done`.
 
 ## Arquitectura de orquestacion GPT <-> Codex
 
