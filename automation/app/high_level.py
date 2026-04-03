@@ -35,6 +35,14 @@ def _json_block(payload: Any) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+def _normalize_repo_relative(raw_path: str) -> str:
+    text = str(raw_path).strip().replace("\\", "/")
+    if text.startswith("./"):
+        text = text[2:]
+    text = text.strip("/")
+    return text or "."
+
+
 class HighLevelOrchestrator:
     def __init__(self, settings: AppSettings, store: SessionStore, runner: CodexRunner) -> None:
         self.settings = settings
@@ -136,6 +144,169 @@ class HighLevelOrchestrator:
             review["focus"] = focus
         return review
 
+    def plan_goal_readonly(
+        self,
+        *,
+        objective: str,
+        scope: str | None = None,
+        constraints: str | None = None,
+        validations: list[str] | None = None,
+        dimensions: list[str] | None = None,
+        workspace: str | None = None,
+    ) -> dict[str, Any]:
+        resolved_workspace = self.settings.resolve_workspace(workspace)
+        prompt = f"""
+Actua como planner tecnico en modo solo lectura.
+
+Convierte un objetivo natural del usuario en un plan tecnico seguro, acotado y listo para una tool de ejecucion con scope estricto.
+
+Objetivo:
+{objective}
+
+Scope opcional:
+{scope or "Sin scope adicional; propone el alcance minimo razonable."}
+
+Constraints:
+{constraints or "Aplicar cambios minimos, seguros, reversibles y compatibles con la arquitectura actual."}
+
+Validaciones sugeridas:
+{_json_block(validations or DEFAULT_VALIDATIONS)}
+
+Dimensiones de analisis:
+{_json_block(dimensions or ["surface_area", "risk", "validation", "likely_files"])}
+
+Contexto del proyecto:
+{self._project_context_bundle()}
+
+Devuelve JSON valido con esta forma exacta:
+{{
+  "plan_short": ["paso 1", "paso 2"],
+  "allowed_paths": ["ruta/permitida", "otra/ruta"],
+  "proposed_validations": ["comando 1"],
+  "estimated_risks": ["riesgo 1"],
+  "next_execution_contract": {{
+    "objective": "objetivo refinado para ejecucion",
+    "constraints": "restricciones concretas",
+    "allowed_paths": ["ruta/permitida"],
+    "max_files_changed": 6,
+    "no_destructive_changes": true
+  }}
+}}
+""".strip()
+        result = self._run_codex_json_step(
+            role="planner_readonly",
+            prompt=prompt,
+            workspace=resolved_workspace,
+            timeout_seconds=180,
+            sandbox_mode="read-only",
+        )
+        raw_allowed_paths = result.get("allowed_paths") or result.get("next_execution_contract", {}).get("allowed_paths") or []
+        allowed_paths = (
+            self._normalize_allowed_paths(raw_allowed_paths, resolved_workspace)
+            if raw_allowed_paths
+            else []
+        )
+        contract = result.get("next_execution_contract") or {}
+        contract["objective"] = contract.get("objective") or objective
+        contract["constraints"] = contract.get("constraints") or constraints or ""
+        contract["allowed_paths"] = allowed_paths
+        contract["max_files_changed"] = int(contract.get("max_files_changed") or 6)
+        contract["no_destructive_changes"] = bool(contract.get("no_destructive_changes", True))
+        return {
+            "plan_short": result.get("plan_short", []),
+            "allowed_paths": allowed_paths,
+            "proposed_validations": result.get("proposed_validations", validations or DEFAULT_VALIDATIONS),
+            "estimated_risks": result.get("estimated_risks", []),
+            "next_execution_contract": contract,
+        }
+
+    def execute_scoped_goal_until_done(
+        self,
+        *,
+        objective: str,
+        allowed_paths: list[str],
+        validations: list[str] | None = None,
+        constraints: str | None = None,
+        workspace: str | None = None,
+        max_iterations: int = 3,
+        max_files_changed: int = 6,
+        no_destructive_changes: bool = True,
+        timeout_seconds: int = 900,
+    ) -> dict[str, Any]:
+        resolved_workspace = self.settings.resolve_workspace(workspace)
+        normalized_paths = self._normalize_allowed_paths(allowed_paths, resolved_workspace)
+        orchestration = self.store.create_orchestration(
+            objective=objective,
+            workspace=resolved_workspace,
+            constraints=constraints,
+            validations=validations or DEFAULT_VALIDATIONS,
+            max_iterations=max_iterations,
+            timeout_seconds=timeout_seconds,
+        )
+        self.store.update_orchestration(
+            orchestration["orchestration_id"],
+            allowed_paths=normalized_paths,
+            max_files_changed=max_files_changed,
+            no_destructive_changes=no_destructive_changes,
+            mode="execute_scoped_goal_until_done",
+        )
+        preflight = self._scope_preflight(
+            objective=objective,
+            allowed_paths=normalized_paths,
+            constraints=constraints,
+            workspace=resolved_workspace,
+        )
+        if not preflight["can_execute"]:
+            blocked = {
+                "orchestration_id": orchestration["orchestration_id"],
+                "final_status": "blocked",
+                "iterations": 0,
+                "planner_summary": "",
+                "codex_summary": "",
+                "reviewer_summary": preflight["reason"],
+                "summary": preflight["reason"],
+                "final_reviewer_assessment": preflight["reason"],
+                "files_changed": [],
+                "validations_run": [],
+                "risks": preflight.get("risks", []),
+                "next_step": "Ajustar allowed_paths o usar una tool de planeacion read-only para redefinir el scope.",
+                "session_ids": [],
+            }
+            self.store.update_orchestration(
+                orchestration["orchestration_id"],
+                status="blocked",
+                completed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                final_result=blocked,
+                iterations=[
+                    {
+                        "iteration": 0,
+                        "planner": {"planner_summary": "Preflight de scope"},
+                        "executor": {"status": "skipped", "files_changed": [], "validations_run": [], "risks": []},
+                        "reviewer": {
+                            "decision": "blocked",
+                            "reviewer_summary": preflight["reason"],
+                            "risks": preflight.get("risks", []),
+                            "next_step": blocked["next_step"],
+                            "blocked_by_scope": True,
+                        },
+                    }
+                ],
+            )
+            return blocked
+
+        return self._run_orchestration_loop(
+            orchestration_id=orchestration["orchestration_id"],
+            objective=preflight.get("refined_objective") or objective,
+            constraints=constraints,
+            validations=validations or DEFAULT_VALIDATIONS,
+            workspace=resolved_workspace,
+            max_iterations=max_iterations,
+            timeout_seconds=timeout_seconds,
+            allowed_paths=normalized_paths,
+            max_files_changed=max_files_changed,
+            no_destructive_changes=no_destructive_changes,
+        )
+
     def run_goal_until_done(
         self,
         *,
@@ -222,6 +393,9 @@ class HighLevelOrchestrator:
         workspace: Path,
         max_iterations: int,
         timeout_seconds: int,
+        allowed_paths: list[str] | None = None,
+        max_files_changed: int | None = None,
+        no_destructive_changes: bool = False,
     ) -> dict[str, Any]:
         start = time.time()
         orchestration = self.store.get_orchestration(orchestration_id)
@@ -244,6 +418,9 @@ class HighLevelOrchestrator:
                 iteration_number=iteration_number,
                 workspace=workspace,
                 timeout_seconds=min(remaining, 180),
+                allowed_paths=allowed_paths,
+                max_files_changed=max_files_changed,
+                no_destructive_changes=no_destructive_changes,
             )
 
             executor_result = self._executor_step(
@@ -254,9 +431,57 @@ class HighLevelOrchestrator:
                 workspace=workspace,
                 session_ids=session_ids,
                 timeout_seconds=min(remaining, max(60, remaining - 30)),
+                allowed_paths=allowed_paths,
+                max_files_changed=max_files_changed,
+                no_destructive_changes=no_destructive_changes,
             )
             if executor_result["session_id"] not in session_ids:
                 session_ids.append(executor_result["session_id"])
+
+            guardrail = self._evaluate_guardrails(
+                executor_result=executor_result,
+                allowed_paths=allowed_paths or [],
+                max_files_changed=max_files_changed,
+                no_destructive_changes=no_destructive_changes,
+                workspace=workspace,
+            )
+            if not guardrail["ok"]:
+                reviewer = {
+                    "decision": "blocked",
+                    "reviewer_summary": guardrail["reason"],
+                    "next_objective": None,
+                    "risks": guardrail["risks"],
+                    "next_step": "Reducir el scope permitido o ajustar la tarea antes de reintentar.",
+                    "blocked_by_guardrail": True,
+                }
+                iteration_record = {
+                    "iteration": iteration_number,
+                    "planner": planner,
+                    "executor": {
+                        "session_id": executor_result["session_id"],
+                        "status": executor_result["status"],
+                        "summary": executor_result.get("summary", ""),
+                        "files_changed": executor_result.get("files_changed", []),
+                        "validations_run": executor_result.get("validations_run", []),
+                        "risks": list(executor_result.get("risks", [])) + guardrail["risks"],
+                    },
+                    "reviewer": reviewer,
+                }
+                existing_iterations.append(iteration_record)
+                orchestration = self.store.update_orchestration(
+                    orchestration_id,
+                    status="blocked",
+                    objective=objective,
+                    constraints=constraints,
+                    validations=validations,
+                    max_iterations=max_iterations,
+                    timeout_seconds=timeout_seconds,
+                    iterations=existing_iterations,
+                    session_ids=session_ids,
+                    last_block_reason=guardrail["reason"],
+                )
+                final_status = "blocked"
+                break
 
             remaining = int(timeout_seconds - (time.time() - start))
             reviewer = self._reviewer_step(
@@ -266,6 +491,9 @@ class HighLevelOrchestrator:
                 iteration_number=iteration_number,
                 workspace=workspace,
                 timeout_seconds=min(max(remaining, 30), 180),
+                allowed_paths=allowed_paths,
+                max_files_changed=max_files_changed,
+                no_destructive_changes=no_destructive_changes,
             )
 
             iteration_record = {
@@ -325,6 +553,9 @@ class HighLevelOrchestrator:
         iteration_number: int,
         workspace: Path,
         timeout_seconds: int,
+        allowed_paths: list[str] | None,
+        max_files_changed: int | None,
+        no_destructive_changes: bool,
     ) -> dict[str, Any]:
         history = orchestration.get("iterations", [])
         prompt = f"""
@@ -337,6 +568,15 @@ Objetivo actual:
 
 Constraints:
 {constraints or "Aplicar cambios minimos, reversibles y compatibles con la arquitectura actual."}
+
+Rutas permitidas:
+{_json_block(allowed_paths or ["Sin restriccion de paths para esta orquestacion."])}
+
+Guardrails:
+{{
+  "max_files_changed": {json.dumps(max_files_changed)},
+  "no_destructive_changes": {json.dumps(no_destructive_changes)}
+}}
 
 Validaciones deseadas:
 {_json_block(validations)}
@@ -360,6 +600,7 @@ Devuelve JSON valido con esta forma exacta:
             prompt=prompt,
             workspace=workspace,
             timeout_seconds=timeout_seconds,
+            sandbox_mode="read-only",
         )
 
     def _reviewer_step(
@@ -371,6 +612,9 @@ Devuelve JSON valido con esta forma exacta:
         iteration_number: int,
         workspace: Path,
         timeout_seconds: int,
+        allowed_paths: list[str] | None,
+        max_files_changed: int | None,
+        no_destructive_changes: bool,
     ) -> dict[str, Any]:
         prompt = f"""
 Actua como reviewer de una iteracion de orquestacion GPT <-> Codex.
@@ -386,6 +630,15 @@ Salida del planner:
 
 Resultado del executor:
 {_json_block(executor_result)}
+
+Scope permitido:
+{_json_block(allowed_paths or ["Sin restriccion de paths para esta orquestacion."])}
+
+Guardrails:
+{{
+  "max_files_changed": {json.dumps(max_files_changed)},
+  "no_destructive_changes": {json.dumps(no_destructive_changes)}
+}}
 
 Decide si:
 - done
@@ -406,6 +659,7 @@ Devuelve JSON valido con esta forma exacta:
             prompt=prompt,
             workspace=workspace,
             timeout_seconds=timeout_seconds,
+            sandbox_mode="read-only",
         )
 
     def _executor_step(
@@ -418,6 +672,9 @@ Devuelve JSON valido con esta forma exacta:
         workspace: Path,
         session_ids: list[str],
         timeout_seconds: int,
+        allowed_paths: list[str] | None,
+        max_files_changed: int | None,
+        no_destructive_changes: bool,
     ) -> dict[str, Any]:
         prompt = self._build_executor_prompt(
             objective=planner.get("executor_objective") or current_objective,
@@ -425,6 +682,9 @@ Devuelve JSON valido con esta forma exacta:
             constraints=planner.get("executor_constraints") or constraints,
             validations=planner.get("validations_to_run") or validations,
             is_continuation=bool(session_ids),
+            allowed_paths=allowed_paths,
+            max_files_changed=max_files_changed,
+            no_destructive_changes=no_destructive_changes,
         )
         if session_ids:
             latest_session_id = session_ids[-1]
@@ -474,6 +734,7 @@ Devuelve JSON valido con esta forma exacta:
         prompt: str,
         workspace: Path,
         timeout_seconds: int,
+        sandbox_mode: str | None = None,
     ) -> dict[str, Any]:
         with tempfile.NamedTemporaryFile(
             delete=False,
@@ -485,7 +746,8 @@ Devuelve JSON valido con esta forma exacta:
         command = (
             f'{subprocess.list2cmdline([self.settings.codex_command])} '
             f'exec -C {subprocess.list2cmdline([str(workspace.resolve())])} '
-            f'-s {self.settings.codex_sandbox_mode} -c approval_policy={self.settings.codex_approval_policy} '
+            f'-s {sandbox_mode or self.settings.codex_sandbox_mode} '
+            f'-c approval_policy={self.settings.codex_approval_policy} '
             f'-o {subprocess.list2cmdline([str(output_path)])} -'
         )
         completed = subprocess.run(
@@ -662,6 +924,9 @@ Devuelve JSON valido con esta forma exacta:
         constraints: str | None,
         validations: list[str] | None,
         is_continuation: bool,
+        allowed_paths: list[str] | None = None,
+        max_files_changed: int | None = None,
+        no_destructive_changes: bool = False,
     ) -> str:
         validations_block = validations or DEFAULT_VALIDATIONS
         mode_text = (
@@ -684,6 +949,15 @@ Scope opcional:
 Constraints opcionales:
 {constraints or "Aplicar intervencion minima, segura y reversible."}
 
+Rutas permitidas:
+{json.dumps(allowed_paths or ["Sin restriccion de paths para esta tarea."], ensure_ascii=False)}
+
+Guardrails:
+{{
+  "max_files_changed": {json.dumps(max_files_changed)},
+  "no_destructive_changes": {json.dumps(no_destructive_changes)}
+}}
+
 Validaciones esperadas:
 {json.dumps(validations_block, ensure_ascii=False)}
 
@@ -695,6 +969,10 @@ Instrucciones de orquestacion:
 - Usa como workspace real la raiz del repo `{self.settings.project_root}`.
 - Formula y aplica cambios con rutas relativas a esa raiz, por ejemplo `review/views.py`.
 - No intentes escribir con rutas absolutas ni fuera del workspace del repo.
+- Si se definieron `allowed_paths`, modifica solo rutas dentro de esos prefijos.
+- Si el objetivo exige tocar rutas fuera de `allowed_paths`, detente y devuelve un JSON final explicando el bloqueo.
+- No excedas `max_files_changed` cuando ese limite este definido.
+- Si `no_destructive_changes` es `true`, evita borrados, renombres destructivos o cambios irreversibles.
 - Devuelve tu MENSAJE FINAL como un JSON valido, sin fences ni texto adicional, con esta forma exacta:
 {{
   "plan_corto": ["paso 1", "paso 2"],
@@ -720,3 +998,151 @@ Contexto del proyecto:
             content = path.read_text(encoding="utf-8", errors="replace")
             chunks.append(f"## {relative}\n{content}")
         return "\n\n".join(chunks)
+
+    def _normalize_allowed_paths(self, allowed_paths: list[str], workspace: Path) -> list[str]:
+        normalized: list[str] = []
+        for raw in allowed_paths:
+            if not raw:
+                continue
+            candidate = Path(raw)
+            if candidate.is_absolute():
+                try:
+                    relative = candidate.resolve().relative_to(workspace.resolve())
+                except ValueError as exc:
+                    raise ValueError(
+                        f"Allowed path fuera del workspace: {candidate}. Workspace: {workspace}"
+                    ) from exc
+                normalized_path = _normalize_repo_relative(relative.as_posix())
+            else:
+                normalized_path = _normalize_repo_relative(raw)
+            if normalized_path not in normalized:
+                normalized.append(normalized_path)
+        if not normalized:
+            raise ValueError("allowed_paths no puede quedar vacio para execute_scoped_goal_until_done.")
+        return normalized
+
+    def _normalize_changed_paths(self, files_changed: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for raw in files_changed:
+            text = str(raw).strip()
+            if len(text) > 3 and text[1] == " " and text[2] != " ":
+                text = text[3:]
+            normalized_path = _normalize_repo_relative(text)
+            if normalized_path not in normalized:
+                normalized.append(normalized_path)
+        return normalized
+
+    def _path_in_allowed_scope(self, relative_path: str, allowed_paths: list[str]) -> bool:
+        normalized = _normalize_repo_relative(relative_path)
+        for allowed in allowed_paths:
+            if allowed == ".":
+                return True
+            if normalized == allowed or normalized.startswith(f"{allowed}/"):
+                return True
+        return False
+
+    def _scope_preflight(
+        self,
+        *,
+        objective: str,
+        allowed_paths: list[str],
+        constraints: str | None,
+        workspace: Path,
+    ) -> dict[str, Any]:
+        prompt = f"""
+Actua como validador de scope en modo solo lectura.
+
+Debes decidir si este objetivo puede ejecutarse de forma segura exclusivamente dentro de los prefijos permitidos.
+
+Objetivo:
+{objective}
+
+Constraints:
+{constraints or "Aplicar cambios minimos y no destructivos."}
+
+Allowed paths:
+{_json_block(allowed_paths)}
+
+Contexto del proyecto:
+{self._project_context_bundle()}
+
+Devuelve JSON valido con esta forma exacta:
+{{
+  "can_execute": true,
+  "reason": "explicacion breve",
+  "refined_objective": "objetivo refinado y acotado",
+  "risks": ["riesgo 1"]
+}}
+""".strip()
+        result = self._run_codex_json_step(
+            role="scope_preflight",
+            prompt=prompt,
+            workspace=workspace,
+            timeout_seconds=120,
+            sandbox_mode="read-only",
+        )
+        return {
+            "can_execute": bool(result.get("can_execute")),
+            "reason": result.get("reason", "El objetivo no cabe dentro de allowed_paths."),
+            "refined_objective": result.get("refined_objective") or objective,
+            "risks": result.get("risks", []),
+        }
+
+    def _evaluate_guardrails(
+        self,
+        *,
+        executor_result: dict[str, Any],
+        allowed_paths: list[str],
+        max_files_changed: int | None,
+        no_destructive_changes: bool,
+        workspace: Path,
+    ) -> dict[str, Any]:
+        risks: list[str] = []
+        changed_paths = self._normalize_changed_paths(executor_result.get("files_changed", []))
+        out_of_scope = [path for path in changed_paths if not self._path_in_allowed_scope(path, allowed_paths)]
+        if out_of_scope:
+            risks.append(
+                "La iteracion intento cambiar rutas fuera de allowed_paths: "
+                + ", ".join(out_of_scope)
+            )
+        if max_files_changed is not None and len(changed_paths) > max_files_changed:
+            risks.append(
+                f"La iteracion excedio max_files_changed={max_files_changed} con {len(changed_paths)} archivos."
+            )
+        if no_destructive_changes:
+            destructive = self._detect_destructive_changes(workspace)
+            if destructive:
+                risks.append(
+                    "Se detectaron cambios potencialmente destructivos en el estado git: "
+                    + ", ".join(destructive)
+                )
+        return {
+            "ok": not risks,
+            "reason": risks[0] if risks else "",
+            "risks": risks,
+        }
+
+    def _detect_destructive_changes(self, workspace: Path) -> list[str]:
+        try:
+            completed = subprocess.run(
+                ["git", "status", "--short"],
+                cwd=str(workspace),
+                capture_output=True,
+                text=True,
+                timeout=20,
+                shell=False,
+            )
+        except Exception:
+            return []
+        if completed.returncode != 0:
+            return []
+        destructive: list[str] = []
+        for raw in completed.stdout.splitlines():
+            line = raw.rstrip()
+            if not line:
+                continue
+            status = line[:2]
+            path = _normalize_repo_relative(line[3:] if len(line) > 3 else line)
+            if "D" in status or "R" in status:
+                destructive.append(path)
+        return destructive

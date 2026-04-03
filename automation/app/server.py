@@ -46,10 +46,10 @@ transport_security = TransportSecuritySettings(
 mcp = FastMCP(
     "evaluador-tecnico-automation",
     instructions=(
-        "Prefer the orchestration tools when the user wants the system to plan, execute, review, and "
-        "iterate on a business objective until completion. Use the simpler high-level tools when a single "
-        "Codex execution is enough. Keep the low-level tools for debugging, manual orchestration, or "
-        "advanced recovery workflows."
+        "Prefer the scoped high-level workflow. First use the read-only planning tool to convert a natural "
+        "goal into a narrow technical contract, then use the scoped execution tool to apply changes only "
+        "inside allowed paths. Keep the broader orchestration tools for advanced cases, and keep the "
+        "low-level tools for debugging, manual orchestration, or advanced recovery workflows."
     ),
     stateless_http=True,
     json_response=True,
@@ -126,6 +126,52 @@ def continue_eval_task_and_wait(
 def review_eval_result(session_id: str, focus: str | None = None) -> dict:
     """Use this when ChatGPT needs a high-level synthesis or audit of a previous session, including status, summary, validations, risks, and whether to continue or close."""
     return orchestrator.review_result(session_id=session_id, focus=focus)
+
+
+@mcp.tool()
+def plan_goal_readonly(
+    objective: str,
+    scope: str | None = None,
+    constraints: str | None = None,
+    validations: list[str] | None = None,
+    dimensions: list[str] | None = None,
+    workspace: str | None = None,
+) -> dict:
+    """Use this when the user wants GPT to convert a natural-language goal into a safe, scoped technical plan before any file changes are attempted."""
+    return orchestrator.plan_goal_readonly(
+        objective=objective,
+        scope=scope,
+        constraints=constraints,
+        validations=validations,
+        dimensions=dimensions,
+        workspace=workspace,
+    )
+
+
+@mcp.tool()
+def execute_scoped_goal_until_done(
+    objective: str,
+    allowed_paths: list[str],
+    validations: list[str] | None = None,
+    constraints: str | None = None,
+    workspace: str | None = None,
+    max_iterations: int = 3,
+    max_files_changed: int = 6,
+    no_destructive_changes: bool = True,
+    timeout_seconds: int = 900,
+) -> dict:
+    """Use this when a narrow scope already exists and the system should execute changes only inside allowed paths, without destructive changes or open-ended repository-wide edits."""
+    return orchestrator.execute_scoped_goal_until_done(
+        objective=objective,
+        allowed_paths=allowed_paths,
+        validations=validations,
+        constraints=constraints,
+        workspace=workspace,
+        max_iterations=max_iterations,
+        max_files_changed=max_files_changed,
+        no_destructive_changes=no_destructive_changes,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 @mcp.tool()

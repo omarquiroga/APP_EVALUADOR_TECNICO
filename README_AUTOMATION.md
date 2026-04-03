@@ -14,9 +14,21 @@ La superficie MCP ya no esta pensada solo como primitivas operativas. La capa re
 
 Las tools low-level siguen existiendo por compatibilidad y depuracion, pero el flujo recomendado ya no depende de polling manual ni de prompts tecnicos extensos redactados por el usuario.
 
+La experiencia original con `run_goal_until_done` resulto demasiado amplia para algunos safety checks de ChatGPT: al no declarar desde la entrada un scope de escritura acotado, la activacion podia bloquearse antes de arrancar. Por eso la UX recomendada ahora separa planeacion read-only y ejecucion con rutas permitidas.
+
 ## Tools recomendadas
 
 ### High-level
+
+- `plan_goal_readonly`
+  - usar cuando el usuario quiera que GPT convierta un objetivo natural en un plan tecnico seguro y acotado
+  - no modifica archivos
+  - devuelve `plan_short`, `allowed_paths`, `proposed_validations`, `estimated_risks` y `next_execution_contract`
+- `execute_scoped_goal_until_done`
+  - usar cuando ya existe un scope acotado y el sistema debe ejecutar cambios solo dentro de rutas permitidas
+  - bloquea la tarea si intenta salir de `allowed_paths`, exceder `max_files_changed` o hacer cambios destructivos
+- `review_orchestration_result`
+  - usar cuando ChatGPT quiera una vision ejecutiva y tecnica de una orquestacion ya corrida
 
 - `run_goal_until_done`
   - usar cuando el usuario quiera que el sistema planifique, ejecute, revise y siga iterando hasta completar o bloquear un cambio
@@ -24,8 +36,6 @@ Las tools low-level siguen existiendo por compatibilidad y depuracion, pero el f
   - devuelve `final_status`, `iterations`, `planner_summary`, `codex_summary`, `reviewer_summary`, `files_changed`, `validations_run`, `risks`, `next_step` y `session_ids`
 - `continue_goal_until_done`
   - usar cuando ya existe una orquestacion previa y ChatGPT debe retomarla sin reconstruir el contexto manualmente
-- `review_orchestration_result`
-  - usar cuando ChatGPT quiera una vision ejecutiva y tecnica de una orquestacion ya corrida
 
 - `run_eval_task_and_wait`
   - usar cuando una sola ejecucion de Codex suele ser suficiente y no hace falta un loop iterativo completo
@@ -36,7 +46,7 @@ Las tools low-level siguen existiendo por compatibilidad y depuracion, pero el f
 - `review_eval_result`
   - usar cuando ChatGPT quiera resumir, auditar o decidir si conviene seguir o cerrar una sesion individual
 
-La UX recomendada pasa primero por `run_goal_until_done`.
+La UX recomendada pasa primero por `plan_goal_readonly` y luego por `execute_scoped_goal_until_done`.
 
 ### Low-level
 
@@ -49,13 +59,13 @@ Estas tres quedan como herramientas de bajo nivel para depuracion, recuperacion 
 ## Flujo recomendado desde ChatGPT
 
 1. El usuario escribe un objetivo corto en lenguaje natural.
-2. ChatGPT llama `run_goal_until_done`.
-3. La app MCP arma el prompt tecnico usando `AGENTS.md`, `docs/PROJECT_CONTEXT.md`, `docs/DECISIONS.md` y `docs/TASKS.md`.
-4. Un planner/reviewer propone la siguiente instruccion tecnica.
-5. Codex ejecuta el trabajo tecnico y devuelve una salida estructurada.
-6. El reviewer decide `done`, `needs_revision` o `blocked`.
-7. Si corresponde, la app itera automaticamente hasta completion, bloqueo, `max_iterations` o `timeout`.
-8. ChatGPT resume el resultado final al usuario y, si hace falta, llama `continue_goal_until_done` o `review_orchestration_result`.
+2. ChatGPT llama `plan_goal_readonly`.
+3. La app MCP arma un plan tecnico seguro con `AGENTS.md`, `docs/PROJECT_CONTEXT.md`, `docs/DECISIONS.md` y `docs/TASKS.md`.
+4. ChatGPT toma `allowed_paths` y el contrato sugerido.
+5. ChatGPT llama `execute_scoped_goal_until_done`.
+6. La app itera planner/reviewer <-> Codex executor dentro de ese scope.
+7. Si el cambio intenta salir de `allowed_paths`, exceder `max_files_changed` o hacer algo destructivo, la orquestacion termina en `blocked`.
+8. ChatGPT resume el resultado final y, si hace falta, llama `review_orchestration_result`.
 
 ## Arquitectura de orquestacion GPT <-> Codex
 
@@ -72,6 +82,13 @@ Estas tres quedan como herramientas de bajo nivel para depuracion, recuperacion 
   - coordina planner -> executor -> reviewer
   - itera automaticamente hasta cumplir el objetivo o llegar a limites
   - registra trazabilidad basica por iteracion
+
+## Guardrails de ejecucion
+
+- `allowed_paths`: toda escritura debe caer dentro de esos prefijos relativos al root del repo
+- `max_files_changed`: si una iteracion excede ese limite, la orquestacion se bloquea
+- `no_destructive_changes`: si el estado git muestra borrados o renombres destructivos, la orquestacion se bloquea
+- preflight de scope: antes de escribir, una etapa read-only valida si el objetivo cabe dentro del scope permitido
 
 ## Criterios de cierre
 
@@ -262,8 +279,11 @@ Ejemplo recomendado para ejecutar trabajo tecnico:
 
 Ejemplo recomendado para una orquestacion completa:
 
-- usuario: `Implementa el ajuste en automation para que GPT planifique, Codex ejecute y el sistema siga iterando hasta terminar.`
-- ChatGPT: llama `run_goal_until_done(objective=..., constraints=..., validations=..., max_iterations=4, timeout_seconds=900)`
+- usuario: `Ajusta el flujo de finance para confirmar evaluaciones y mantenlo acotado a review/.`
+- ChatGPT:
+  1. llama `plan_goal_readonly(objective=...)`
+  2. revisa `allowed_paths`
+  3. llama `execute_scoped_goal_until_done(objective=..., allowed_paths=[...])`
 - la app MCP: planifica, ejecuta, revisa, reitera si hace falta y devuelve un solo resultado final estructurado
 
 Ejemplo recomendado para continuar una sesion:
